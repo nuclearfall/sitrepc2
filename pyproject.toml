@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling>=1.9"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sitrepc2"
+version = "0.1.0"
+description = "Automated event and location extraction pipeline for war reporting."
+requires-python = ">=3.10,<3.12"
+
+dependencies = [
+    "numpy>=1.21,<1.25",         # <-- REQUIRED: spaCy 3.5.x is not compatible with numpy 2.x
+    "spacy>=3.5.0,<3.6",
+    "holmes-extractor",
+    "coreferee",
+    "python-dotenv",
+    "shapely",
+    "pyproj",
+    "typer",
+    "telethon",
+    "mip",
+]
+
+[project.scripts]
+sitrepc2 = "sitrepc2.cli.app:app"
+
+
+# Hatch build configuration
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sitrepc2"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src",
+]
+
+[tool.hatch.build]
+include = [
+    "src/sitrepc2/reference/**/*",
+]

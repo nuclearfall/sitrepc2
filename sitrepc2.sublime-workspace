@@ -1,0 +1,922 @@
+{
+	"auto_complete":
+	{
+		"selected_items":
+		[
+			[
+				"TRA",
+				"TRAINING_HASHTAGS"
+			],
+			[
+				"norn",
+				"normalize_location_key"
+			],
+			[
+				"Pr",
+				"ProximityAnchor"
+			],
+			[
+				"candidat",
+				"locale_candidates"
+			],
+			[
+				"Resol",
+				"ResolvedLocation"
+			],
+			[
+				"Ev",
+				"EventMention"
+			],
+			[
+				"serai",
+				"serialize_resolved"
+			],
+			[
+				"rnd",
+				"rndr_ctx_changed"
+			],
+			[
+				"phy",
+				"phys_ctx_changed"
+			],
+			[
+				"edpi_",
+				"edpi_ctx_changed"
+			],
+			[
+				"prope",
+				"property\tNew Property"
+			],
+			[
+				"Cano",
+				"CANONICAL"
+			],
+			[
+				"__",
+				"__setattr__"
+			],
+			[
+				"imp",
+				"imprecise_str"
+			],
+			[
+				"g",
+				"geometryChanged"
+			],
+			[
+				"geom",
+				"geometryAboutToChange"
+			],
+			[
+				"para",
+				"params_kwargs"
+			],
+			[
+				"_fiel",
+				"_fields_by_key"
+			],
+			[
+				"proe",
+				"property_line_edit"
+			],
+			[
+				"pre",
+				"property_line_edit"
+			],
+			[
+				"Proper",
+				"property\tNew Property"
+			],
+			[
+				"Ty",
+				"TYPE_CHECKING"
+			],
+			[
+				"prop",
+				"propertyCommitted"
+			],
+			[
+				"pro",
+				"property\tNew Property"
+			],
+			[
+				"U",
+				"UnitStrGeometryField"
+			],
+			[
+				"propert",
+				"property\tNew Property"
+			],
+			[
+				"Unit",
+				"UnitStrGeometry"
+			],
+			[
+				"TYP",
+				"TYPE_CHECKING"
+			],
+			[
+				"new_rec",
+				"new_rect_y"
+			],
+			[
+				"ele",
+				"elem_modview"
+			],
+			[
+				"geome",
+				"geometryChanged"
+			],
+			[
+				"proepr",
+				"property\tNew Property"
+			],
+			[
+				"opu",
+				"populate_pages_with_csv"
+			],
+			[
+				"appl",
+				"_apply_base_hints"
+			],
+			[
+				"proper",
+				"property\tNew Property"
+			],
+			[
+				"bor",
+				"border_width"
+			],
+			[
+				"_ds",
+				"_display_dpi"
+			],
+			[
+				"proep",
+				"property\tNew Property"
+			],
+			[
+				"setMax",
+				"setMaximumWidth"
+			],
+			[
+				"DEF",
+				"DEFAULT_INCREMENTS"
+			],
+			[
+				"geomet",
+				"geometry_with_px_pos"
+			],
+			[
+				"uni",
+				"unit_str_geometry_field"
+			],
+			[
+				"Uni",
+				"UnitStrGeometryField"
+			],
+			[
+				"_geom",
+				"unit_str_geometry_field"
+			],
+			[
+				"QGraph",
+				"QGraphicsObject"
+			],
+			[
+				"bll",
+				"bleed_field"
+			],
+			[
+				"corn",
+				"corners_field"
+			],
+			[
+				"_bor",
+				"_border_color"
+			],
+			[
+				"_obr",
+				"_border_color"
+			],
+			[
+				"bord",
+				"border_color"
+			],
+			[
+				"QPAIN",
+				"QPainterPathStroker"
+			],
+			[
+				"_has_",
+				"_has_csv_content"
+			],
+			[
+				"c",
+				"component_template"
+			],
+			[
+				"compon",
+				"component_template"
+			],
+			[
+				"ov",
+				"_overset_hit_rect"
+			],
+			[
+				"ove",
+				"overset_hit_rect"
+			],
+			[
+				"lai",
+				"laid_out_h"
+			],
+			[
+				"lad",
+				"laid_out_w"
+			],
+			[
+				"is_",
+				"is_overset_expanded"
+			],
+			[
+				"_is",
+				"_is_overset_expanded"
+			],
+			[
+				"_over",
+				"_overset_hit_rect"
+			],
+			[
+				"with",
+				"geometry_with_px_pos"
+			],
+			[
+				"Al",
+				"AlignLeft"
+			],
+			[
+				"Align",
+				"AlignHCenter"
+			],
+			[
+				"font",
+				"last_font_new_default"
+			],
+			[
+				"remove_t",
+				"remove_template_by_pid"
+			],
+			[
+				"bleed",
+				"bleed_label"
+			],
+			[
+				"UnitS",
+				"UnitStrGeometry"
+			],
+			[
+				"Compon",
+				"ComponentTemplate"
+			],
+			[
+				"req",
+				"required_next"
+			],
+			[
+				"ComponentTem",
+				"ComponentTemplateView"
+			],
+			[
+				"remove_temp",
+				"remove_template_from_all_tabs"
+			],
+			[
+				"upd",
+				"updateGrid"
+			],
+			[
+				"_pa",
+				"_pagination_policy"
+			],
+			[
+				"paginat",
+				"pagination_policy"
+			],
+			[
+				"pag",
+				"pagination_policy"
+			],
+			[
+				"Clon",
+				"CloneComponentToSlotsCommand"
+			],
+			[
+				"pagina",
+				"pagination_policy"
+			],
+			[
+				"white",
+				"whitespace_in_units"
+			],
+			[
+				"set",
+				"setParentItem"
+			],
+			[
+				"Com",
+				"ComponentElement"
+			],
+			[
+				"parse",
+				"parse_dimension"
+			],
+			[
+				"unre",
+				"unreg_target"
+			],
+			[
+				"prot",
+				"proto_registry"
+			],
+			[
+				"temp",
+				"template_updated"
+			],
+			[
+				"resize_s",
+				"resize_start_item_pos"
+			],
+			[
+				"UnitSt",
+				"UnitStrGeometry"
+			],
+			[
+				"_dragging_star",
+				"_dragging_start_geom"
+			],
+			[
+				"resize_st",
+				"resize_start_item_geometry"
+			],
+			[
+				"_dra",
+				"_dragging_start_geom"
+			],
+			[
+				"starting",
+				"starting_drag_item"
+			],
+			[
+				"elem",
+				"elment_changed"
+			],
+			[
+				"unit_st",
+				"unit_str_geometry"
+			],
+			[
+				"obje",
+				"object_registered"
+			],
+			[
+				"globa",
+				"global_get_by_prefix"
+			],
+			[
+				"ori",
+				"orientation_changed"
+			],
+			[
+				"_a",
+				"_applyOrientation"
+			],
+			[
+				"PAGE",
+				"PAGE_SIZES"
+			],
+			[
+				"_regis",
+				"_ensure_registered"
+			],
+			[
+				"sele",
+				"selected_element"
+			],
+			[
+				"get_all_",
+				"get_global_by_type"
+			],
+			[
+				"_handl",
+				"_handle_property_change"
+			],
+			[
+				"selec",
+				"selected_element"
+			],
+			[
+				"conf",
+				"conform_geometry_pos"
+			],
+			[
+				"conform",
+				"conform_geometry_rect"
+			],
+			[
+				"conform_geom",
+				"conform_geometry_rect"
+			],
+			[
+				"_mar",
+				"_margin_top"
+			],
+			[
+				"pagination",
+				"pagination_policy"
+			],
+			[
+				"compone",
+				"component_template"
+			],
+			[
+				"cand",
+				"candidate_item"
+			],
+			[
+				"flag",
+				"display_flag_changed"
+			],
+			[
+				"curre",
+				"currentItem"
+			],
+			[
+				"get_page",
+				"get_page_rect_px"
+			],
+			[
+				"_marg",
+				"_margin_right"
+			],
+			[
+				"Resiz",
+				"ResizeAndMoveElementCommand"
+			],
+			[
+				"Resize",
+				"ResizeTemplateCommand"
+			],
+			[
+				"Change",
+				"ChangeGeometryCommand"
+			],
+			[
+				"QGraphcisS",
+				"QGraphicsSceneDragDropEvent"
+			],
+			[
+				"_current",
+				"_current_template"
+			],
+			[
+				"on",
+				"object_name_changed"
+			],
+			[
+				"setM",
+				"setMinimumWidth"
+			],
+			[
+				"setMini",
+				"setMinimumWidth"
+			],
+			[
+				"C",
+				"ComponentTemplate"
+			],
+			[
+				"_al",
+				"_alt_drag_first_pass"
+			],
+			[
+				"resize_star",
+				"resize_start_scene_pos"
+			],
+			[
+				"eleme",
+				"element_changed"
+			],
+			[
+				"Geometr",
+				"GeometrySetter"
+			],
+			[
+				"px",
+				"to_px_qrectf"
+			]
+		]
+	},
+	"buffers":
+	[
+		{
+			"file": "src/sitrepc2/ingest/telegram.py",
+			"settings":
+			{
+				"buffer_size": 21444,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			},
+			"undo_stack":
+			[
+			]
+		},
+		{
+			"file": "LICENSE.txt",
+			"settings":
+			{
+				"buffer_size": 19283,
+				"encoding": "UTF-8",
+				"line_ending": "Unix",
+				"name": "Skip to main text"
+			},
+			"undo_stack":
+			[
+				[
+					1,
+					1,
+					"paste",
+					null,
+					"AQAAAAAAAAAAAAAAU0sAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/"
+				]
+			]
+		}
+	],
+	"build_system": "",
+	"build_system_choices":
+	[
+	],
+	"build_varint": "",
+	"command_palette":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"console":
+	{
+		"height": 0.0,
+		"history":
+		[
+		]
+	},
+	"distraction_free":
+	{
+		"menu_visible": true,
+		"show_minimap": false,
+		"show_open_files": false,
+		"show_tabs": false,
+		"side_bar_visible": false,
+		"status_bar_visible": false
+	},
+	"expanded_folders":
+	[
+		"/Volumes/bladerunner/Projects/sitrepc2",
+		"/Volumes/bladerunner/Projects/sitrepc2/.sitrepc2",
+		"/Volumes/bladerunner/Projects/sitrepc2/.venv",
+		"/Volumes/bladerunner/Projects/sitrepc2/data",
+		"/Volumes/bladerunner/Projects/sitrepc2/src",
+		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2",
+		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/cli",
+		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/ingest",
+		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/nlp"
+	],
+	"file_history":
+	[
+		"/Users/bladerunner/Projects/types.py",
+		"/Users/bladerunner/Projects/sitrepc2/src/sitrepc2/nlp/pipeline.py",
+		"/Users/bladerunner/Projects/sitrepc2/src/sitrepc2/config/__init__.py",
+		"/Users/bladerunner/Projects/mod-mymap/src/modmymap/ingest/telegram.py",
+		"/Users/bladerunner/Projects/sitrepc2/config/paths.py",
+		"/Users/bladerunner/Projects/sitrepc2/holmes_test.py",
+		"/Users/bladerunner/Projects/sitrepc2.bak/src/sitrepc2/util/install_models.py",
+		"/Users/bladerunner/Projects/mod-mymap/pyproject.toml",
+		"/Users/bladerunner/Projects/mod-mymap/src/modmymap/util/install_models.py",
+		"/Users/bladerunner/Projects/sitrepc2/pyproject.toml",
+		"/Users/bladerunner/Projects/sitrepc2/src/sitrepc2/cli/__init__.py",
+		"/Users/bladerunner/Projects/sitrepc2/src/sitrepc2/cli/app.py",
+		"/Users/bladerunner/Projects/sitrepc2/src/sitrepc2/cli/init_cmd.py",
+		"/Users/bladerunner/Projects/sitrepc2/src/sitrepc2/util/normalize.py",
+		"/Users/bladerunner/Projects/sitrepc2/config/resources.py",
+		"/Users/bladerunner/Projects/sitrepc2/src/sitrepc2/nlp/macros.py",
+		"/Users/bladerunner/Projects/sitrepc2/src/sitrepc2/nlp/phrases.py",
+		"/Users/bladerunner/Projects/sitrepc2/src/sitrepc2/ingest/telegram_ingest.py",
+		"/Users/bladerunner/Projects/tel_ex/telex.py",
+		"/Users/bladerunner/Projects/sitrepc2/src/sitrepc2/nlp/locations.py",
+		"/Users/bladerunner/Projects/sitrepc2/src/sitrepc2/nlp/events.py",
+		"/Users/garyboyd/Projects/sitrepc2/data/reference/war_lexicon",
+		"/Users/garyboyd/Projects/sitrepc2/data/config/channels.jsonl",
+		"/Users/garyboyd/Projects/sitrepc2/src/sitrepc2/gazetteer/index.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/gazetteer/index.py",
+		"/Users/garyboyd/Projects/sitrepc2/src/sitrepc2/nlp/locations.py",
+		"/Users/garyboyd/Projects/sitrepc2/src/sitrepc2/nlp/models.py",
+		"/Users/garyboyd/Projects/mod-mymap/data/gazetteer/locale_lookup.csv",
+		"/Users/garyboyd/Projects/sitrepc2/tests/test_spacy_models.py",
+		"/Users/garyboyd/Projects/sitrepc2/tests/test_init.py",
+		"/Users/garyboyd/Projects/sitrepc2/pyproject.toml",
+		"/Users/garyboyd/Projects/sitrepc2/.pre-commit-config.yaml",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/cli.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/pipeline.py",
+		"/Users/garyboyd/Projects/mod-mymap/mdvstrf.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/cluster.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/gazetteer/directions.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/resolver.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/util/overpass_query.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/type_defs.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/util/qid_resolver.py",
+		"/Users/garyboyd/Projects/mod-mymap/pyproject.toml",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/gazetteer/type_defs.py",
+		"/Users/garyboyd/Projects/mod-mymap/data/interim/2025/2025-11/2025-11-29/review/location_review_2025-11-29.md",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/context.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/ingest/telegram.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/util/proximity.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/confidence.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/review_markdown.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/frontline/frontline.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/__init__.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/util/progress_bar.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/geo/fetch_divgen_kml.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/ingest/pretranslate_filter.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/ingest/telegram.py.bak",
+		"/Users/garyboyd/Projects/mod-mymap/data/telegram/channels.jsonl",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/geo/units_projectowlosint.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/events.py",
+		"/Users/garyboyd/Projects/mod-mymap/data/interim/2025/2025-11/2025-11-20/review/location_review_2025-11-20.md",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/location.py",
+		"/Users/garyboyd/Projects/mod-mymap/data/gazetteer/region_lookup.csv",
+		"/Users/garyboyd/Projects/mod-mymap/data/gazetteer/eval_text.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/phrase.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/tokenize.py",
+		"/Users/garyboyd/Projects/mod-mymap/data/gazetteer/op_groups.json",
+		"/Users/garyboyd/Projects/mod-mymap/data/spatial/op_groups.geojson",
+		"/Users/garyboyd/Projects/mod-mymap/docs/nlp_pipeline.md",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/chunking.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/message_chunks.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/serialization.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/normalize.py",
+		"/Users/garyboyd/Projects/mod-mymap/scripts/generate_docs.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/actor.py",
+		"/Users/garyboyd/Projects/mod-mymap/add_aliases.py",
+		"/Users/garyboyd/Projects/mod-mymap/ukraine_places.csv",
+		"/Users/garyboyd/Projects/mod-mymap/all_locales.py",
+		"/Users/garyboyd/Projects/mod-mymap/data/tg_channels/channels.jsonl",
+		"/Users/garyboyd/Projects/mod-mymap/data/interim/2025/2025-11/2025-11-20/posts.translated.jsonl",
+		"/Users/garyboyd/Projects/mod-mymap/data/gazetteer/add_aliases.py",
+		"/Users/garyboyd/Projects/mod-mymap/data/interim/2025/2025-11/2025-11-14/posts.translated.jsonl",
+		"/Users/garyboyd/Projects/mod-mymap/data/interim/2025/2025-11/2025-11-20/review/review_locations.md",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/gazetteer/gazetteer.md",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/gazetteer/exonyms.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/gazetteer/build.py",
+		"/Users/garyboyd/Projects/mod-mymap/data/gazetteer/build_exonyms.py",
+		"/Users/garyboyd/Projects/mod-mymap/data/gazetteer/locale_lookup.csv.bak",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/gazetteer/build_groups.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/gazetteer/opgroups.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/gazetteer/op_groups.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/util/normalization.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/out.txt",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/phrases.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/debug_pipeline.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/disambiguate.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/chunk.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/# src:modmymap:nlp:debug_pipeline.py",
+		"/Users/garyboyd/Projects/mod-mymap/data/interim/2025/2025-11/2025-11-20/resolved.jsonl",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/location_hints.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/gazetteer_scan.py",
+		"/Users/garyboyd/Projects/mod-mymap/data/interim/2025/2025-11/2025-11-20/mentions.jsonl",
+		"/Users/garyboyd/Projects/mod-mymap/data/interim/2025/2025-11/2025-11-20/events.jsonl",
+		"/Users/garyboyd/Projects/mod-mymap/data/interim/2025/2025-11/2025-11-20/review/review_locations.csv",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/util/csv_helpers.py",
+		"/Users/garyboyd/Projects/mod-mymap/data/raw/telegram/2025-11-21/GeneralStaffZSU_2025-11-21T10-10-22Z.jsonl",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/test_tokenize.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/pipelines/extract_mentions.py",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/hashtag_locations.py",
+		"/Users/garyboyd/Projects/mod-mymap/data/spatial/locales.geojson",
+		"/Users/garyboyd/Projects/mod-mymap/test_tokenize.py",
+		"/Users/garyboyd/Projects/mod-mymap/data/external/frontline/loc_polylines.geojson",
+		"/Users/garyboyd/Projects/mod-mymap/data/gazetteer/mil_acronyms.csv",
+		"/Users/garyboyd/Projects/mod-mymap/get_regions.py",
+		"/Users/garyboyd/Projects/mod-mymap/data/spatial/extracted_donetsk.geojson",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/gazetteer/update_aliases.py",
+		"/Users/garyboyd/Projects/mod-mymap/data/spatial/regions_nonunion.geojson",
+		"/Users/garyboyd/Projects/mod-mymap/data/spatial/extracted_lines.geojson",
+		"/Users/garyboyd/Projects/mod-mymap/data/spatial/regions.geojson",
+		"/Users/garyboyd/Projects/mod-mymap/data/gazetteer/common_locales.json",
+		"/Users/garyboyd/Projects/mod-mymap/data/gazetteer/mil_acronyms.json",
+		"/Users/garyboyd/Projects/mod-mymap/data/gazetteer/common_locals.json",
+		"/Users/garyboyd/Projects/mod-mymap/data/spatial/regions_no_geometry.geojson",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/location_resolver.py",
+		"/Users/garyboyd/Projects/mod-mymap/data/spatial/example_geom.json",
+		"/Users/garyboyd/Projects/mod-mymap/data/gazetteer/lookup_index.csv",
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/chunk_en.py",
+		"/Users/garyboyd/Projects/mod-mymap/data/spatial/luhansk_poly.geojson",
+		"/Users/garyboyd/Projects/mod-mymap/data/spatial/locations.geojson",
+		"/Users/garyboyd/Downloads/region_lookup.geojson"
+	],
+	"find":
+	{
+		"height": 28.0
+	},
+	"find_in_files":
+	{
+		"height": 119.0,
+		"where_history":
+		[
+		]
+	},
+	"find_state":
+	{
+		"case_sensitive": true,
+		"find_history":
+		[
+		],
+		"highlight": true,
+		"in_selection": false,
+		"preserve_case": false,
+		"regex": true,
+		"replace_history":
+		[
+		],
+		"reverse": false,
+		"scrollbar_highlights": true,
+		"show_context": true,
+		"use_buffer2": false,
+		"use_gitignore": true,
+		"whole_word": false,
+		"wrap": true
+	},
+	"groups":
+	[
+		{
+			"sheets":
+			[
+				{
+					"buffer": 0,
+					"file": "src/sitrepc2/ingest/telegram.py",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 21444,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								134,
+								134
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/Python/Python.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 1,
+					"stack_multiselect": false,
+					"type": "text"
+				},
+				{
+					"buffer": 1,
+					"file": "LICENSE.txt",
+					"selected": true,
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 19283,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								19283,
+								19283
+							]
+						],
+						"settings":
+						{
+							"auto_name": "Skip to main text",
+							"syntax": "Packages/Text/Plain text.tmLanguage",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 5514.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 0,
+					"stack_multiselect": false,
+					"type": "text"
+				}
+			]
+		}
+	],
+	"incremental_find":
+	{
+		"height": 28.0
+	},
+	"input":
+	{
+		"height": 44.0
+	},
+	"layout":
+	{
+		"cells":
+		[
+			[
+				0,
+				0,
+				1,
+				1
+			]
+		],
+		"cols":
+		[
+			0.0,
+			1.0
+		],
+		"rows":
+		[
+			0.0,
+			1.0
+		]
+	},
+	"menu_visible": true,
+	"output.find_results":
+	{
+		"height": 160.0,
+		"history":
+		[
+		]
+	},
+	"pinned_build_system": "",
+	"project": "sitrepc2.sublime-project",
+	"replace":
+	{
+		"height": 52.0
+	},
+	"save_all_on_build": true,
+	"select_file":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+			[
+				"",
+				"utils/units/unit_str.py"
+			]
+		],
+		"width": 0.0
+	},
+	"select_project":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"select_symbol":
+	{
+		"height": 255.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 592.0
+	},
+	"selected_group": 0,
+	"settings":
+	{
+	},
+	"show_minimap": false,
+	"show_open_files": true,
+	"show_tabs": true,
+	"side_bar_visible": true,
+	"side_bar_width": 236.0,
+	"status_bar_visible": true,
+	"template_settings":
+	{
+	}
+}
