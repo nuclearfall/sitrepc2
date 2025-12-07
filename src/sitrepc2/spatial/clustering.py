@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from statistics import median
 from math import inf
 
-from sitrepc2.spatial.distance import haversine_km   # ensure correct import path
+from sitrepc2.spatial.distance import haversine_km
 from sitrepc2.nlp.typedefs import Location, LocaleCandidate, LocaleEntry
 
 

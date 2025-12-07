@@ -1,138 +1,76 @@
-# src/sitrepc2/nlp/typedefs.py
+from dataclasses import dataclass
 
-from __future__ import annotations
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Optional, List, Union, Dict, Any
-
-if TYPE_CHECKING:
-    from gazetteer.typedefs.import LocaleEntry, RegionEntry, OpGroupEntry, DirectionEntry
-
-
-# ---------------------------------------------------------------------------
-# Action Taxonomy
-# ---------------------------------------------------------------------------
-
-class ActionKind(Enum):
-    SHELLING = "shelling"
-    ATTACK = "attack"
-    ADVANCE = "advance"
-    DEFENSE = "defense"
-    CAPTURE = "capture"
-    WITHDRAWAL = "withdrawal"
-    OTHER = "other"
-
-
-@dataclass
-class Action:
+@dataclass(frozen=True, slots=True)
+class HolmesWordMatch:
     """
-    Normalized action classification.
+    Thin wrapper around one entry from the 'word_matches' list in the
+    dictionary returned by Holmes Manager.match().
+
+    This mirrors the documented properties in 6.7 as far as we care
+    about them right now.
     """
-    kind: ActionKind
-    label: str        # taxonomy label, e.g., "artillery_shelling"
-    raw_verb: str     # verb as seen in the original event text
+
+    search_phrase_token_index: int
+    search_phrase_word: str
+
+    document_token_index: int
+    first_document_token_index: int
+    last_document_token_index: int
+    structurally_matched_document_token_index: int
+
+    document_subword_index: int | None
+    document_subword_containing_token_index: int | None
+
+    document_word: str
+    document_phrase: str
+
+    match_type: str
+    negated: bool
+    uncertain: bool
+    similarity_measure: float
+    involves_coreference: bool
+
+    extracted_word: str | None
+    depth: int
+    explanation: str | None
 
 
-# ---------------------------------------------------------------------------
-# Actor Entity
-# ---------------------------------------------------------------------------
-
-@dataclass
-class Actor:
+@dataclass(frozen=True, slots=True)
+class HolmesEventMatch:
     """
-    Actor involved in an event (unit, group AO, generic force, etc.).
+    High-level wrapper around a single Holmes match dict for structural
+    extraction use.
+
+    We store Holmes' own human-readable context instead of re-slicing
+    the Doc for text: `sentences_within_document` is the raw text of
+    the matching sentence(s), and `search_phrase_text` is the phrase
+    that was matched.
     """
-    name: str
-    role: str = "primary"
-    is_group: bool = False
-    is_generic: bool = False
 
-
-# ---------------------------------------------------------------------------
-# Context Types
-# ---------------------------------------------------------------------------
-
-class CtxKind(Enum):
-    REGION = "region"
-    DIRECTION = "direction"
-    PROXIMITY = "proximity"
-    GROUP = "group"
-
-
-@dataclass
-class SitRepContext:
-    """
-    A contextual hint affecting interpretation of locations/events.
-    Scope identifies the level at which it applies.
-    """
-    kind: CtxKind
-    value: Any   # RegionEntry | DirectionEntry | LocaleEntry | string
-
-    # optional scoping
-    location_id: Optional[str] = None
-    event_id: Optional[str] = None
-    section_id: Optional[str] = None
-    post_id: Optional[str] = None
-
-
-# ---------------------------------------------------------------------------
-# Location Resolution Objects
-# ---------------------------------------------------------------------------
-
-@dataclass
-class LocaleCandidate:
-    """
-    A possible resolution for a location string.
-    Persists through entire workflow for review.
-    """
-    locale: LocaleEntry
-    confidence: float  # 0.0 - 1.0 probability
-
-    # unary contextual metrics
-    distance_from_frontline_km: Optional[float] = None
-    distance_from_anchor_km: Optional[float] = None
-    is_cluster_outlier: Optional[bool] = None
-
-    # scoring metadata
-    scores: Dict[str, float] = field(default_factory=dict)
-
-
-@dataclass
-class Location:
-    """
-    Represents a location mention and its full candidate set.
-    Used in review and final resolution.
-    """
-    text: str                           # raw location string from event text
-    candidates: List[LocaleCandidate]   # possible matches
-
-    selection: Optional[LocaleCandidate] = None
-    selection_confidence: float = 0.0   # equals selection.confidence normally
-
-    cluster_id: Optional[int] = None    # series grouping
-    contexts: List[SitRepContext] = field(default_factory=list)
-
-
-# ---------------------------------------------------------------------------
-# War Event Object
-# ---------------------------------------------------------------------------
-
-@dataclass
-class Event:
-    """
-    Canonical war-event object.
-    Stable across ingestion → processing → review → commit.
-    """
     event_id: str
     post_id: str
 
-    text: str
-    actor: Optional[Actor]
-    action: Optional[Action]
+    label: str
+    search_phrase_text: str
+    sentences_within_document: str
 
-    locations: List[Location] = field(default_factory=list)
-    contexts: List[SitRepContext] = field(default_factory=list)
+    overall_similarity: float
+    negated: bool
+    uncertain: bool
+    involves_coreference: bool
 
-    negated: bool = False
-    uncertain: bool = False
-    involves_coreference: bool = False
+    doc_start_token_index: int
+    doc_end_token_index: int
+
+    word_matches: list[HolmesWordMatch]
+    raw_match: dict[str, Any] | None = None
+
+    def iter_content_words(self) -> Iterable[HolmesWordMatch]:
+        """
+        Yield word-matches that are not generic placeholders like
+        'somebody'/'something'.
+        """
+        for wm in self.word_matches:
+            if wm.document_word.lower() in {"somebody", "something"}:
+                continue
+            yield wm

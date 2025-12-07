@@ -10,7 +10,8 @@ from sitrepc2.util.normalize import normalize_location_key
 from sitrepc2.util.serialization import serialize, deserialize
 from sitrepc2.util.encoding import decode_coord_u64
 
-from sitrepc2.gazetteer.typedefs import LocaleEntry, RegionEntry
+from sitrepc2.gazetteer.typedefs import LocaleEntry, RegionEntry, GroupEntry, DirectionEntry
+
 
 
 # ---------------------------------------------------------------------------
