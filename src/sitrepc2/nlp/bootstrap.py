@@ -6,7 +6,7 @@ from typing import Any
 
 @dataclass
 class HolmesSettings:
-    model: str = "en_core_web_trf"
+    model: str = "en_core_web_lg"
     overall_similarity_threshold: float = 1.0
     embedding_based_matching_on_root_words: bool = False
     ontology: Any = None

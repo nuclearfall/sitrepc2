@@ -1,146 +1,51 @@
-# src/modmymap/gazetteer/index.py
 from __future__ import annotations
 
 import ast
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Optional, Sequence, List, Any
 from pathlib import Path
-from normalize import normalize_location_key
-from modmymap.util.normalization import normalize_location_key
+
+from sitrepc2.config.paths import resolve_gazetteer_paths
+from sitrepc2.util.normalize import normalize_location_key
 
 
-# ---------------------------------------------------------------------------
-# Data structures
-# ---------------------------------------------------------------------------
-
-@dataclass
-class LocaleEntry:
+def _unpack_aliases(aliases_str: str | None) -> list[str]:
     """
-    One row from locale_lookup.csv.
-
-    Expected header:
-        name, aliases, place, wikidata, coordinates, region, ru_group, usage
+    Convert a semicolon-separated alias string into a list[str].
     """
+    if aliases_str is None:
+        return []
+    if not isinstance(aliases_str, str):
+        raise TypeError(f"Expected str or None, got {type(aliases_str)}")
 
-    name: str
-    aliases: list[str]
-    place: str
-    wikidata: str | None
-    lon: float | None
-    lat: float | None
-    region: str | None         # parent oblast
-    ru_group: str | None       # Russian operational group
-    usage: int
-
-    @classmethod
-    def from_row(cls, row: dict) -> "LocaleEntry":
-        raw_aliases = row.get("aliases", "") or ""
-        aliases = [a.strip() for a in raw_aliases.split(";") if a.strip()]
-
-        name = (row.get("name") or "").strip()
-        if name:
-            norm_name = normalize_location_key(name)
-            if norm_name not in aliases:
-                aliases.append(norm_name)
-
-        coords_str = (row.get("coordinates") or "").strip()
-        lat = lon = None
-        if coords_str:
-            try:
-                coords = ast.literal_eval(coords_str)
-                if (
-                    isinstance(coords, (list, tuple))
-                    and len(coords) == 2
-                    and all(isinstance(x, (int, float)) for x in coords)
-                ):
-                    lon = float(coords[0])
-                    lat = float(coords[1])
-            except Exception:
-                pass
-
-        wikidata = (row.get("wikidata") or "").strip() or None
-        region = (row.get("region") or "").strip() or None
-        ru_group = (row.get("ru_group") or "").strip() or None
-
-        usage_str = (row.get("usage") or "").strip()
-        try:
-            usage = int(usage_str) if usage_str else 0
-        except ValueError:
-            usage = 0
-
-        place = (row.get("place") or "").strip()
-
-        return cls(
-            name=name,
-            aliases=aliases,
-            place=place,
-            wikidata=wikidata,
-            lat=lat,
-            lon=lon,
-            region=region,
-            ru_group=ru_group,
-            usage=usage,
-        )
-
-    def to_dict(self) -> dict:
-        return {
-            "name": self.name,
-            "aliases": self.aliases,
-            "place": self.place,
-            "wikidata": self.wikidata,
-            "lat": self.lat,
-            "lon": self.lon,
-            "region": self.region,
-            "ru_group": self.ru_group,
-            "usage": self.usage,
-        }
+    return [a.strip() for a in aliases_str.split(";") if a.strip()]
 
 
-@dataclass
-class RegionEntry:
+def _pack_aliases(aliases_ls: list[str] | None) -> str:
     """
-    One row from region_lookup.csv — but now ALWAYS a single region per alias.
-
-    We no longer support lists of region candidates.
+    Convert list[str] back into the canonical semicolon-separated CSV string.
     """
+    if aliases_ls is None:
+        return ""
+    if not isinstance(aliases_ls, list):
+        raise TypeError(f"Expected list[str] or None, got {type(aliases_ls)}")
 
-    wikidata: str | None
-    iso3166_2: str | None
-    name: str                 # canonical English name
-    aliases: list[str]        # all normalized alias keys (including name)
-    source: str | None
+    return ";".join(a.strip() for a in aliases_ls if a.strip())
 
-    @classmethod
-    def from_row(cls, row: dict) -> "RegionEntry":
-        raw_aliases = row.get("aliases", "") or ""
-        aliases = [a.strip() for a in raw_aliases.split(";") if a.strip()]
 
-        name = (row.get("name") or "").strip()
-        if name:
-            norm = normalize_location_key(name)
-            if norm not in aliases:
-                aliases.append(norm)
-
-        wikidata = (row.get("wikidata") or "").strip() or None
-        iso3166_2 = (row.get("iso3166_2") or "").strip() or None
-        source = (row.get("source") or "").strip() or None
-
-        return cls(
-            wikidata=wikidata,
-            iso3166_2=iso3166_2,
-            name=name,
-            aliases=aliases,
-            source=source,
-        )
-
-    def to_dict(self) -> dict:
-        return {
-            "wikidata": self.wikidata,
-            "iso3166_2": self.iso3166_2,
-            "name": self.name,
-            "aliases": self.aliases,
-            "source": self.source,
-        }
+def _pack_obj_aliases(objs: list[object]) -> list[object]:
+    """
+    Given a list of dataclass objects, return modified dicts from serialize(),
+    with aliases packed into CSV format.
+    """
+    out = []
+    for obj in objs:
+        d = serialize(obj)
+        aliases = d.get("aliases", None)
+        d["aliases"] = _pack_aliases(aliases)
+        out.append(d)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -154,26 +59,26 @@ class GazetteerIndex:
 
     PHASE 1 changes:
       - Region aliases now map to EXACTLY ONE RegionEntry.
-      - search_region() returns RegionEntry | None (NOT a list).
+      - search_region() returns RegionEntry | None (NOT a List).
       - Duplicate region aliases raise an error at load time.
     """
 
     def __init__(
         self,
-        locales: list[LocaleEntry],
-        regions: list[RegionEntry],
+        locales: List[LocaleEntry],
+        regions: List[RegionEntry],
     ) -> None:
         self.locales = locales
         self.regions = regions
 
-        # alias_key -> list[LocaleEntry]
-        self._locale_by_alias: dict[str, list[LocaleEntry]] = {}
+        # alias_key -> List[LocaleEntry]
+        self._locale_by_alias: dict[str, List[LocaleEntry]] = {}
 
-        # alias_key -> RegionEntry  (NOT list)
+        # alias_key -> RegionEntry  (NOT List)
         self._region_by_alias: dict[str, RegionEntry] = {}
 
-        # region_key -> list[LocaleEntry]
-        self._locale_by_region: dict[str, list[LocaleEntry]] = {}
+        # region_key -> List[LocaleEntry]
+        self._locale_by_region: dict[str, List[LocaleEntry]] = {}
 
         self._build_indexes()
 
@@ -204,32 +109,87 @@ class GazetteerIndex:
     # ------------------------------------------------------------------ #
 
     @classmethod
-    def from_csv_files(
+    def load_canonical(
         cls,
-        locale_path: Path = Path("data/gazetteer/locale_lookup.csv"),
-        region_path: Path = Path("data/gazetteer/region_lookup.csv"),
+        root: Path | None = None,
         encoding: str = "utf-8",
     ) -> "GazetteerIndex":
-        locales: list[LocaleEntry] = []
-        regions: list[RegionEntry] = []
 
-        with locale_path.open("r", encoding=encoding, newline="") as f:
-            for row in csv.DictReader(f):
-                locales.append(LocaleEntry.from_row(row))
+        out: list[list[object]] = []
 
-        with region_path.open("r", encoding=encoding, newline="") as f:
-            for row in csv.DictReader(f):
-                regions.append(RegionEntry.from_row(row))
+        for path in resolve_gazetteer_paths(root):
+            entries: list[object] = []
+            with path.open("r", encoding=encoding, newline="") as f:
+                for row in csv.DictReader(f):
+                    row["aliases"] = _unpack_aliases(row.get("aliases"))
+                    entries.append(deserialize(row))
+            out.append(entries)
 
+        locales, regions, *_ = out
         return cls(locales=locales, regions=regions)
+
+    @classmethod
+    def load_patch(
+        cls,
+        file_path: Path | str,
+        root: Path | None = None,
+        encoding: str = "utf-8",
+    ) -> list["LocaleEntry"]:
+        """Load a patch CSV and return a list of LocaleEntry objects."""
+        if root is None:
+            raise ValueError("root must not be None")
+
+        patch_path = root / Path(file_path)
+        entries: list[LocaleEntry] = []
+
+        with patch_path.open("r", encoding=encoding, newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                row["aliases"] = _unpack_aliases(row.get("aliases"))
+                entries.append(deserialize(row))
+
+        return entries
+
+    @classmethod
+    def dump_patch(
+        cls,
+        objs: Sequence["LocaleEntry"],
+        file_path: Path | str,
+        root: Path | None = None,
+        encoding: str = "utf-8",
+    ) -> None:
+        """Write a sequence of LocaleEntry patches to CSV via serialize()."""
+        if root is None:
+            raise ValueError("root must not be None")
+
+        patch_path = root / Path(file_path)
+
+        # (1) serialize objects
+        entries = [serialize(obj) for obj in objs]
+
+        if not entries:
+            raise ValueError("No data to write in dump_patch()")
+
+        # (2) pack aliases into CSV-friendly string
+        for row in entries:
+            row["aliases"] = _pack_aliases(row.get("aliases"))
+
+        # (3) write CSV
+        fieldnames = list(entries[0].keys())
+
+        with patch_path.open("w", encoding=encoding, newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(entries)
+
 
     # ------------------------------------------------------------------ #
     # Lookup API
     # ------------------------------------------------------------------ #
 
-    def search_locale(self, text: str) -> list[LocaleEntry]:
+    def search_locale(self, text: str) -> List[LocaleEntry]:
         key = normalize_location_key(text)
-        return list(self._locale_by_alias.get(key, []))
+        return List(self._locale_by_alias.get(key, []))
 
     def search_region(self, text: str) -> RegionEntry | None:
         """
@@ -255,13 +215,13 @@ class GazetteerIndex:
 
     # ---------------------------------------------
 
-    def locales_in_region(self, region_text: str) -> list[LocaleEntry]:
+    def locales_in_region(self, region_text: str) -> List[LocaleEntry]:
         region_key = normalize_location_key(region_text)
-        return list(self._locale_by_region.get(region_key, []))
+        return List(self._locale_by_region.get(region_key, []))
 
     def search_locale_in_region(
         self, text: str, region_text: str | None
-    ) -> list[LocaleEntry]:
+    ) -> List[LocaleEntry]:
         if region_text is None:
             return self.search_locale(text)
 
@@ -276,7 +236,7 @@ class GazetteerIndex:
 
     def search_locale_in_ru_group(
         self, text: str, ru_group: str | None
-    ) -> list[LocaleEntry]:
+    ) -> List[LocaleEntry]:
         if ru_group is None:
             return self.search_locale(text)
         ru_group = ru_group.strip()
@@ -292,3 +252,20 @@ class GazetteerIndex:
 
     def has_region(self, text: str) -> bool:
         return self.search_region(text) is not None
+
+    def dump_aliases(self, key: str | None = None) -> List[str]:
+        if key is None or key == "all":
+            entries = self.locales + self.regions
+        else:
+            entries = getattr(self, key, None)
+            if entries is None:
+                raise AttributeError(
+                    f"Invalid key for dump_aliases: {key!r}. "
+                    "Valid keys are 'locales', 'regions', or 'all'"
+                ) from None
+
+        return [
+            alias
+            for entry in entries
+            for alias in entry.aliases
+        ]

@@ -37,6 +37,10 @@ def get_dotpath(root: Path) -> Path:
     """Return the `.sitrepc2` directory for the given project root."""
     return root / DOTDIR_NAME
 
+def dot_path(root: Path, path: str | Path) -> Path:
+    """Return a path inside the project's `.sitrepc2/` directory."""
+    return get_dotpath(root) / path
+
 
 # ---------------------------------------------------------------------------
 # 2. Workspace paths (mutable copies in .sitrepc2/)
@@ -44,23 +48,23 @@ def get_dotpath(root: Path) -> Path:
 
 GAZ_LOCALE = "locale_lookup.csv"
 GAZ_REGION = "region_lookup.csv"
-GAZ_OPGROUP = "op_groups_ao.geojson"
 GAZ_FEATURES = "features_expanded.csv"
 LEX_JSON = "war_lexicon.json"
+TGM_SOURCES = "tg_channels.jsonl"
+OPS_GROUPS = "op_groups.json"
 
 
-def gazetteer_paths(dotpath: Path) -> Dict[str, Path]:
-    """Return workspace gazetteer paths in `.sitrepc2/`."""
-    return {
-        "locale": dotpath / GAZ_LOCALE,
-        "region": dotpath / GAZ_REGION,
-    }
+def op_groups_path(root: Path) -> Path:
+    """Return workspace operational group AO path in `.sitrepc2/`."""
+    return dot_path(root, OPS_GROUPS)
 
+def lexicon_path(root: Path) -> Path:
+    """Return workspace lexicon path in `.sitrepc2/`."""
+    return dot_path(root, LEX_JSON)
 
-def get_lexicon(dotpath: Path) -> Path:
-    """Return the workspace lexicon path in `.sitrepc2/`."""
-    return dotpath / LEX_JSON
-
+def tg_channels_path(root: Path) -> Path:
+    """Return workspace Telegram channel list path in `.sitrepc2/`."""
+    return dot_path(root, TGM_SOURCES)
 
 # ---------------------------------------------------------------------------
 # 3. Canonical reference files (read-only inside installed package)
@@ -73,16 +77,33 @@ def reference_root() -> Path:
     """
     return Path(files("sitrepc2") / "reference")
 
+def ref_path(path: str|Path) -> Path
+    return reference_root() / path
 
-def source_gazetteer_paths() -> Dict[str, Path]:
+def source_gazetteer_paths() -> Tuple[Path, Path]:
     """Return canonical gazetteer paths inside the installed package."""
-    base = reference_root() / "gazetteer"
-    return {
-        "locale": base / GAZ_LOCALE,
-        "region": base / GAZ_REGION,
-    }
+    base = reference_root()
+    return (
+        ref_path(GAZ_LOCALE),
+        ref_path(GAZ_REGION),
+    )
 
+def source_op_groups_path() -> Path:
+    return ref_path(OPS_GROUPS)
+
+def source_tg_channels_path() -> Path:
+    return ref_path(TGM_SOURCES)
 
 def source_lexicon_path() -> Path:
     """Return canonical lexicon path inside the installed package."""
-    return reference_root() / LEX_JSON
+    return ref_path(LEX_JSON)
+
+
+def current_root() -> Path:
+    """Discover the current sitrepc2 project root (git-style)."""
+    return find_repo_root()
+
+
+def current_dotpath() -> Path:
+    """Return the `.sitrepc2` path for the current working project."""
+    return get_dotpath(current_root())

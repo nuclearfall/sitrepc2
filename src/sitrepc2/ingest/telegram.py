@@ -64,18 +64,6 @@ HARDCODED_CHANNELS: list[ChannelConfig] = [
         channel_lang="uk",
         active=False,
     ),
-    ChannelConfig(
-        channel_name="militarysummary",
-        alias="MS",
-        channel_lang="en",
-        active=False,
-    ),
-    ChannelConfig(
-        channel_name="rybar_in_english",
-        alias="Rybar",
-        channel_lang="en",
-        active=True,
-    ),
 ]
 
 # Phrases to keep posts for. Edit/extend as needed.

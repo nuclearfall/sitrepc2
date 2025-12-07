@@ -1,42 +1,91 @@
+# ----------------------------------------
 # Python
+# ----------------------------------------
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
-*.so
-*.egg-info/
-dist/
-build/
-.eggs/
+*$py.class
 
-# Virtual environment
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+wheels/
+
+# Virtual environments
 .venv/
 venv/
+env/
+ENV/
 
-# IDE / Editor
-.vscode/
-.idea/
-.DS_Store
+# PyInstaller
+*.manifest
+*.spec
 
-# Jupyter
+# Unit test / coverage
+.coverage
+coverage.xml
+htmlcov/
+.cache/
+
+# Jupyter / notebooks
 .ipynb_checkpoints/
 
-# Data / Outputs
-data/raw/
-data/interim/
-data/processed/
+# MyPy / Pyright
+.mypy_cache/
+.dmypy.json
+.pyre/
+.pytype/
+
+# Ruff / black / linting
+.ruff_cache/
+.black/
+
+# ----------------------------------------
+# Project-specific: sitrepc2
+# ----------------------------------------
+# Local data cache; never commit user workspace reproductions
+.sitrepc2/
+
+# Local logs, temp output, scratch dirs
+logs/
+tmp/
+temp/
+scratch/
+
+# Local test files and playgrounds
+local_test/
+local_dev/
+
+# ----------------------------------------
+# CLI artifacts
+# ----------------------------------------
 *.log
 *.tmp
 
-# Environment / secrets
-.env
-.env.*
+# ----------------------------------------
+# OS / Editor Artifacts
+# ----------------------------------------
 
-# Cache
-*.cache/
-__pycache__/
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
 
-# Coverage / testing
-.coverage
-htmlcov/
-pytest_cache/
+# Thumbnail cache files
+._*
+
+# Files that might appear on external disks
+.Spotlight-V100
+.Trashes
+
+# VSCode
+.vscode/
+
+# Sublime Text (explicit per request)
+*.sublime-project
+*.sublime-workspace
+*.sublime-settings
+Sublime\ Text\ Cache/
+Sublime\ Text\ Backup/
