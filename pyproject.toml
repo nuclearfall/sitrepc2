@@ -9,7 +9,7 @@ description = "Automated event and location extraction pipeline for war reportin
 requires-python = ">=3.10,<3.12"
 
 dependencies = [
-    "numpy>=1.21,<1.25",         # <-- REQUIRED: spaCy 3.5.x is not compatible with numpy 2.x
+    "numpy>=1.21,<1.25",
     "spacy>=3.5.0,<3.6",
     "holmes-extractor",
     "coreferee",
@@ -17,9 +17,9 @@ dependencies = [
     "shapely",
     "pyproj",
     "typer",
-    "telethon",
-    "mip",
+    "telethon"
 ]
+
 
 [project.scripts]
 sitrepc2 = "sitrepc2.cli.app:app"

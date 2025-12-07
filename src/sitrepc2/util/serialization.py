@@ -1,17 +1,20 @@
-# src/sitrepc2/nlp/serialization.py
+# src/sitrepc2/util/serialization.py
 
 from dataclasses import is_dataclass, fields
 from enum import Enum
+from typing import Any, Type, TypeVar, get_origin, get_args
+
+T = TypeVar("T")
 
 
 # ---------------------------------------------------------------------------
 # Generic Serializer
 # ---------------------------------------------------------------------------
 
-def serialize(obj):
+def serialize(obj: Any):
     """
     Recursively convert dataclasses, Enums, lists, and dicts into
-    JSON-serializable structures. Domain classes require no custom code.
+    JSON-serializable structures.
     """
     # dataclass → dict
     if is_dataclass(obj):
@@ -34,42 +37,55 @@ def serialize(obj):
 
 
 # ---------------------------------------------------------------------------
-# Generic Deserializer (optional)
+# Generic Deserializer (AUTODETECTING)
 # ---------------------------------------------------------------------------
 
-def deserialize(cls, data):
+def deserialize(data: dict, cls: Type[T]) -> T:
     """
-    Reconstructs dataclass instances recursively from serialized dicts.
-    Requires cls to be a dataclass.
-    Enum fields are reconstructed via Enum(field_type).
+    Reconstruct dataclass instances from a dict. This matches usage inside
+    gazetteer/index.py where deserialize(row, LocaleEntry) is needed.
+
+    Supports:
+      - nested dataclasses
+      - lists of dataclasses
+      - Enums
+      - native float/int values already provided by caller
     """
     if not is_dataclass(cls):
-        raise TypeError(f"deserialize() requires a dataclass, got {cls}")
+        raise TypeError(f"deserialize() requires a dataclass type, got: {cls}")
 
     kwargs = {}
+
     for f in fields(cls):
-        value = data.get(f.name)
+        name = f.name
         ftype = f.type
+        value = data.get(name)
 
-        # reconstruct nested dataclasses
-        origin = getattr(ftype, "__origin__", None)
+        # If missing, just pass it as None/default
+        if value is None:
+            kwargs[name] = None
+            continue
 
+        origin = get_origin(ftype)
+
+        # Nested dataclass
         if is_dataclass(ftype):
-            kwargs[f.name] = deserialize(ftype, value)
+            kwargs[name] = deserialize(value, ftype)
 
         # list[...] handling
         elif origin is list:
-            subt = ftype.__args__[0]
-            if is_dataclass(subt):
-                kwargs[f.name] = [deserialize(subt, v) for v in value]
+            subtype = get_args(ftype)[0]
+            if is_dataclass(subtype):
+                kwargs[name] = [deserialize(v, subtype) for v in value]
             else:
-                kwargs[f.name] = value
+                kwargs[name] = value
 
-        # Enum reconstruction
+        # Enum handling
         elif isinstance(ftype, type) and issubclass(ftype, Enum):
-            kwargs[f.name] = ftype(value)
+            kwargs[name] = ftype(value)
 
         else:
-            kwargs[f.name] = value
+            # Primitive (float, int, str)
+            kwargs[name] = value
 
     return cls(**kwargs)

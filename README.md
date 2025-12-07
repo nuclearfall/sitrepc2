@@ -3,11 +3,11 @@
 **sitrepc2** is an automated OSINT processing engine designed to extract structured, geolocated military activity from unstructured text sources—primarily Telegram war‑reporting posts. It ingests raw narrative descriptions of battlefield events and transforms them into normalized, mappable data suitable for tactical and operational-level situational reporting.
 
 ## Requirements:
-Holmes still requires en_core_web_lg. So if you choose to use spaCys transform model, just be aware that this will require both being in memory at the same time. Our addition to spaCy's entity rulers is fairly minimal, so it shouldn't impact requirements at all.
+Holmes requires both that and the large vector-based model. So, if you want to use spaCys transforms, you'll have both in memory. Our additions to spaCy's entity rulers and the war lexicon are minimal, and should have a minimal impact on resource requirements.
 
 Recommended Minimums:
-8 GB RAM with vector based spaCy model: en_core_web_lg)
-16 GB RAM for transform based spaCy model: en_core_web_lg and en_core_web_trf
+- **8 GB RAM**: Vector based spaCy model: **en_core_web_lg**
+- **16 GB RAM**: Transform based spaCy model: **en_core_web_lg** and **en_core_web_trf**
 
 ---
 

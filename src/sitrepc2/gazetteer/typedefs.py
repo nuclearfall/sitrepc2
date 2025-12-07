@@ -37,23 +37,41 @@ class Coordinates:
 # Gazetteer Entry
 # ---------------------------------------------------------------------------
 
+from dataclasses import dataclass
+from typing import Optional, List
+
 @dataclass(frozen=True)
 class LocaleEntry:
     """
-    Canonical representation of a mappable place.
-    May be:
-      - from locale_lookup.csv
-      - patch entry
-      - user-defined coordinate point
+    Canonical representation of a mappable place in the sitrepc2 gazetteer.
+    Derived directly from locale_lookup.csv (base) or patch CSVs.
+
+    Fields:
+      - name: primary display name
+      - aliases: alternate names, spellings, exonyms (list[str])
+      - lon, lat: normalized WGS84 coordinates
+      - cid: 64-bit packed coordinate identity (encode_coord_u64)
+      - region: oblast (optional)
+      - ru_group: Russian Military District / Operational Group (optional)
+      - place: settlement type ("city", "village", etc.)
+      - wikidata: external ID (optional)
+      - usage: integer usage counter
+      - source: "base" | "patch" | "manual"
     """
-    id: str
+
     name: str
     aliases: List[str]
-    coordinates: Coordinates
+
+    lon: float
+    lat: float
+    cid: int
 
     region: Optional[str] = None
-    group: Optional[str] = None
+    ru_group: Optional[str] = None
     place: Optional[str] = None
     wikidata: Optional[str] = None
     usage: int = 0
-    source: str = "base"      # "base" | "patch" | "manual"
+    source: str = "base"
+
+
+
