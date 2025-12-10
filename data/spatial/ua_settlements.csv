@@ -1,8 +1,4 @@
 osm_type,osm_id,place,name,name:uk,wikidata,lat,lon
-none,none,village,verkhnia tokmachka,Верхня Токмачка,,47.45984,36.33892
-node,27212295,city,Yevpatoriya,Євпаторія,Q33345,45.1907635,33.3679049
-node,337579368,city,Severodonetsk,Сіверськодонецьк,Q160584,48.9478698,38.4936475
-node,1756064266,city,Melitopol,Мелітополь,Q33349,46.8467267,35.3827281
 node,26150422,city,Kyiv,Київ,Q1899,50.4500336,30.5241361
 node,26150436,city,Chernihiv,Чернігів,Q157053,51.494099,31.294332
 node,26150437,city,Odesa,Одеса,Q1874,46.4843023,30.7322878
