@@ -6,15 +6,15 @@ from typing import Any, Iterable, List
 
 import holmes_extractor as holmes
 
-from .typedefs import HolmesWordMatch
+from .typedefs import WordMatch
 
 
-def build_word_matches(raw_match: dict[str, Any]) -> list[HolmesWordMatch]:
+def build_word_matches(raw_match: dict[str, Any]) -> list[WordMatch]:
     """
-    Build HolmesWordMatch objects from a raw Holmes match dict
+    Build WordMatch objects from a raw Holmes match dict
     (the single dict from Manager.match()).
     """
-    result: list[HolmesWordMatch] = []
+    result: list[WordMatch] = []
     for wm in raw_match.get("word_matches", []) or []:
         # Required core index; if it's missing, something is badly wrong
         if "document_token_index" not in wm:
@@ -43,7 +43,7 @@ def build_word_matches(raw_match: dict[str, Any]) -> list[HolmesWordMatch]:
             val = wm.get(key, default)
             return "" if val is None else str(val)
 
-        wp = HolmesWordMatch(
+        wp = WordMatch(
             search_phrase_token_index=_get_int("search_phrase_token_index", 0),
             search_phrase_word=_get_str("search_phrase_word"),
 

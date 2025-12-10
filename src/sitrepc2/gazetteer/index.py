@@ -10,9 +10,12 @@ from sitrepc2.util.normalize import normalize_location_key
 from sitrepc2.util.serialization import serialize, deserialize
 from sitrepc2.util.encoding import decode_coord_u64
 
-from sitrepc2.gazetteer.typedefs import LocaleEntry, RegionEntry, GroupEntry, DirectionEntry
-
-
+from sitrepc2.gazetteer.typedefs import (
+    LocaleEntry,
+    RegionEntry,
+    GroupEntry,
+    DirectionEntry,
+)   
 
 # ---------------------------------------------------------------------------
 # Alias packing / unpacking
@@ -62,30 +65,28 @@ def _pack_obj_aliases(objs: list[object]) -> list[object]:
 
 class GazetteerIndex:
     """
-    In-memory index for locales and regions.
-
-    Provides:
-      - alias lookups
-      - region → locales mapping
-      - reverse CID lookup
-      - nearest-neighbor search
-      - nearest-matching-name search
+    In-memory index for locales, regions, and directions.
     """
 
     def __init__(
         self,
         locales: List[LocaleEntry],
         regions: List[RegionEntry],
+        directions: List[DirectionEntry],
     ) -> None:
 
         self.locales = locales
         self.regions = regions
+        self.directions = directions
 
         # alias_key → List[LocaleEntry]
         self._locale_by_alias: dict[str, List[LocaleEntry]] = {}
 
         # alias_key → RegionEntry
         self._region_by_alias: dict[str, RegionEntry] = {}
+
+        # alias_key → DirectionEntry
+        self._direction_by_alias: dict[str, DirectionEntry] = {}  # NEW
 
         # region_name → List[LocaleEntry]
         self._locale_by_region: dict[str, List[LocaleEntry]] = {}
@@ -123,17 +124,32 @@ class GazetteerIndex:
                     )
                 self._region_by_alias[key] = reg
 
+        # --- directions: enforce unique alias mapping (NEW)
+        for d in self.directions:
+            for alias in d.aliases:
+                key = normalize_location_key(alias)
+                if key in self._direction_by_alias:
+                    raise ValueError(
+                        f"Duplicate direction alias '{alias}' mapping multiple directions: "
+                        f"{self._direction_by_alias[key].name!r} and {d.name!r}"
+                    )
+                self._direction_by_alias[key] = d
+
     # ------------------------------------------------------------------ #
     # Loading
     # ------------------------------------------------------------------ #
-
     @classmethod
     def load_canonical(
         cls,
         root: Path | None = None,
         encoding: str = "utf-8",
     ) -> "GazetteerIndex":
-
+        """
+        Expected file order from resolve_gazetteer_paths:
+        1. locales
+        2. regions
+        3. directions
+        """
         out: list[list[object]] = []
 
         for path in resolve_gazetteer_paths(root):
@@ -141,20 +157,27 @@ class GazetteerIndex:
             with path.open("r", encoding=encoding, newline="") as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    # aliases → list[str]
                     row["aliases"] = _unpack_aliases(row.get("aliases"))
 
-                    # numeric fields
+                    # numeric conversions
                     if row.get("lon"): row["lon"] = float(row["lon"])
                     if row.get("lat"): row["lat"] = float(row["lat"])
                     if row.get("cid"): row["cid"] = int(row["cid"])
+                    if row.get("anchor"): row["anchor"] = int(row["anchor"])
 
-                    entries.append(deserialize(row, LocaleEntry))
+                    # dynamic dataclass detection
+                    if "anchor" in row:
+                        entries.append(deserialize(row, DirectionEntry))
+                    elif "neighbors" in row or "wikidata" in row:
+                        entries.append(deserialize(row, RegionEntry))
+                    else:
+                        entries.append(deserialize(row, LocaleEntry))
 
             out.append(entries)
 
-        locales, regions, *_ = out
-        return cls(locales=locales, regions=regions)
+        locales, regions, directions = out[:3]
+        return cls(locales=locales, regions=regions, directions=directions)
+
 
     @classmethod
     def load_patch(
@@ -215,6 +238,30 @@ class GazetteerIndex:
     # ------------------------------------------------------------------ #
     # Lookup API
     # ------------------------------------------------------------------ #
+
+    def search_direction(self, text: str) -> DirectionEntry | None:
+        """
+        Match direction by name or alias.
+        Supports slight natural-language variants.
+        """
+        key = normalize_location_key(text)
+
+        # direct alias match
+        d = self._direction_by_alias.get(key)
+        if d:
+            return d
+
+        # allow "kupyansk direction"
+        if key.endswith(" direction"):
+            base = key[:-10].strip()
+            return self._direction_by_alias.get(base)
+
+        # allow "direction of kupyansk"
+        if key.startswith("direction of "):
+            base = key[len("direction of "):].strip()
+            return self._direction_by_alias.get(base)
+
+        return None
 
     def search_locale(self, text: str) -> List[LocaleEntry]:
         key = normalize_location_key(text)

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
-class HolmesWordMatch:
+class WordMatch:
     """
     Thin wrapper around one entry from the 'word_matches' list in the
     dictionary returned by Holmes Manager.match().
@@ -36,7 +36,7 @@ class HolmesWordMatch:
 
 
 @dataclass(frozen=True, slots=True)
-class HolmesEventMatch:
+class EventMatch:
     """
     High-level wrapper around a single Holmes match dict for structural
     extraction use.
@@ -62,10 +62,10 @@ class HolmesEventMatch:
     doc_start_token_index: int
     doc_end_token_index: int
 
-    word_matches: list[HolmesWordMatch]
+    word_matches: list[WordMatch]
     raw_match: dict[str, Any] | None = None
 
-    def iter_content_words(self) -> Iterable[HolmesWordMatch]:
+    def iter_content_words(self) -> Iterable[WordMatch]:
         """
         Yield word-matches that are not generic placeholders like
         'somebody'/'something'.

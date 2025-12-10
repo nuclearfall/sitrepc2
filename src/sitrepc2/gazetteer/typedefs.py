@@ -1,44 +1,14 @@
-# src/sitrepc2/nlp/typedefs.py
+# src/sitrepc2/gazetteer/typedefs.py
 
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, List
 
-class DirectionEntry:
-    """Placeholder for direction/axis representation."""
-    label: str = "UNKNOWN_DIRECTION"
-
-    def __init__(self, label: str = "UNKNOWN_DIRECTION"):
-        self.label = label
-
-
-class GroupEntry:
-    """Placeholder for Russian/Ukrainian group AO entities."""
-    name: str = "UNKNOWN_GROUP"
-
-    def __init__(self, name: str = "UNKNOWN_GROUP"):
-        self.name = name
-
-# ---------------------------------------------------------------------------
-# Basic Coordinate Type
-# ---------------------------------------------------------------------------
-
-@dataclass
-class Coordinates:
-    """
-    Represents geographic coordinates.
-    Lat/lon order is enforced to avoid confusion.
-    """
-    lat: float
-    lon: float
 
 
 # ---------------------------------------------------------------------------
 # Gazetteer Entry
 # ---------------------------------------------------------------------------
-
-from dataclasses import dataclass
-from typing import Optional, List
 
 @dataclass(frozen=True)
 class LocaleEntry:
@@ -58,13 +28,12 @@ class LocaleEntry:
       - usage: integer usage counter
       - source: "base" | "patch" | "manual"
     """
-
+    cid: int # 64 bit coordinate-based id
     name: str
     aliases: List[str]
 
     lon: float
     lat: float
-    cid: int
 
     region: Optional[str] = None
     ru_group: Optional[str] = None
@@ -73,5 +42,28 @@ class LocaleEntry:
     usage: int = 0
     source: str = "base"
 
+
+@dataclass(frozen=True)
+class RegionEntry:
+    name: str
+    wikidata: str
+    iso3166_2: str
+    aliases: List[str]
+    neighbors: List[str]
+
+@dataclass(frozen=True)
+class GroupEntry:
+    """Russian Group AO entities."""
+    name: str
+    group_id: int
+    aliases: List[str]
+    regions: List[str]
+    neighbors: List[str]
+
+@dataclass(frozen=True)
+class DirectionEntry:
+    name: str
+    aliases: List[str] # eg, Kupiansk, Kupyansk ...
+    anchor: int # location cid of the anchoring location
 
 

@@ -8,7 +8,6 @@ from typing import Any
 from sitrepc2.config.paths import source_lexicon_path, lexicon_path
 
 
-
 def load_war_lexicon() -> dict[str, Any]:
     import json
     try:
@@ -37,7 +36,7 @@ def _iter_triggers(values: Iterable[str]) -> Iterable[str]:
         yield trigger
 
 
-def register_war_search_phrases(
+def register_search_phrases(
     manager: holmes.Manager,
 ) -> None:
     lexicon = load_war_lexicon()

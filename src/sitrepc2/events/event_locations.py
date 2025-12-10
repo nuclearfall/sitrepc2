@@ -5,15 +5,15 @@ from typing import Literal
 
 from spacy.tokens import Doc, Span
 
-from sitrepc2.holmes.events import HolmesEventMatch
-from sitrepc2.nlp.typedefs import EventLocationMention, LocationKind
+from sitrepc2.nlp.events import EventMatch
+from sitrepc2.nlp.typedefs import Location, LocationKind
 
 LocationLabel = Literal["LOCALE", "REGION"]
 
 
 def iter_locale_region_spans_for_event(
     doc: Doc,
-    hem: HolmesEventMatch,
+    hem: EventMatch,
     *,
     labels: Iterable[LocationLabel] = ("LOCALE", "REGION"),
     require_contained: bool = True,
@@ -39,7 +39,7 @@ def iter_locale_region_spans_for_event(
 
 def iter_extracted_locale_region_spans_for_event(
     doc: Doc,
-    hem: HolmesEventMatch,
+    hem: EventMatch,
     *,
     labels: Iterable[LocationLabel] = ("LOCALE", "REGION"),
 ) -> Iterator[Span]:
@@ -81,7 +81,7 @@ def _span_location_kind(ent: Span) -> LocationKind:
 
 def resolve_event_locations(
     doc: Doc,
-    hem: HolmesEventMatch,
+    hem: EventMatch,
     *,
     default_role: str = "TARGET",
 ) -> list[EventLocationMention]:

@@ -33,7 +33,6 @@ MAX_TRANSLATION_RETRIES = 5
 # Channel config
 # ---------------------------------------------------------------------------
 
-
 @dataclass
 class ChannelConfig:
     channel_name: str
@@ -579,12 +578,10 @@ async def _ingest_telegram_window_async(
                     record = {
                         "source": "telegram",
                         "channel": cfg.channel_name,
-                        "alias": cfg.alias,
                         "channel_lang": cfg.channel_lang,
                         "post_id": msg.id,
                         "published_at": _utc_iso(msg.date),
                         "fetched_at": _utc_iso(datetime.now(UTC)),
-                        "raw_text": raw_text,
                         "text": text_en,
                     }
 

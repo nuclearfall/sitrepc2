@@ -8,17 +8,9 @@ from spacy.language import Language
 from spacy.pipeline import EntityRuler
 from sitrepc2.config.paths import gazetteer_paths
 
-OtherEntitySpec = Tuple[
-    Sequence[Path | str],  # csvs
-    Sequence[str],         # labels
-    Sequence[str],         # field names
-]
 
-
-def add_gazetteer_ruler(
+def add_entity_rulers(
     nlp: Language,
-    other_entity: OtherEntitySpec | None = None,
-    *,
     default_aliases_field: str = "aliases",
 ) -> Language:
     """
@@ -38,19 +30,11 @@ def add_gazetteer_ruler(
     ruler.validate = True
     ruler.ent_id_sep = None
 
-    locale_csv, region_csv = gazetteer_paths()
+    locale_csv, region_csv, group_csv = gazetteer_paths()
 
-    paths: list[Path] = [Path(locale_csv), Path(region_csv)]
-    labels: list[str] = ["LOCALE", "REGION"]
-    fields: list[str] = [default_aliases_field, default_aliases_field]
-
-    if other_entity is not None:
-        other_csvs, other_labels, other_fields = other_entity
-        if not (len(other_csvs) == len(other_labels) == len(other_fields)):
-            raise ValueError("other_entity sequences (csvs, labels, fields) must match in length")
-        paths.extend(Path(p) for p in other_csvs)
-        labels.extend(other_labels)
-        fields.extend(other_fields)
+    paths: list[Path] = [Path(locale_csv), Path(region_csv), Path(group_csv)]
+    labels: list[str] = ["LOCALE", "REGION", "GROUP"]
+    fields: list[str] = [default_aliases_field, default_aliases_field, default_aliases_field]
 
     for path, label, field in zip(paths, labels, fields):
         aliases = _aliases_from_csv(path, aliases_field=field)

@@ -48,15 +48,20 @@ def dot_path(root: Path, path: str | Path) -> Path:
 
 GAZ_LOCALE = "locale_lookup.csv"
 GAZ_REGION = "region_lookup.csv"
-GAZ_FEATURES = "features_expanded.csv"
+GAZ_GROUPS = "group_lookup.csv"
+# GAZ_FEATURES = "features_expanded.csv"
 LEX_JSON = "war_lexicon.json"
 TGM_SOURCES = "tg_channels.jsonl"
-OPS_GROUPS = "op_groups.json"
+GAZ_PATHS = (
+    GAZ_LOCALE,
+    GAZ_REGION,
+    GAZ_GROUPS,
+)
 
 
 def op_groups_path(root: Path) -> Path:
     """Return workspace operational group AO path in `.sitrepc2/`."""
-    return dot_path(root, OPS_GROUPS)
+    return dot_path(root, GAZ_GROUPS)
 
 def lexicon_path(root: Path) -> Path:
     """Return workspace lexicon path in `.sitrepc2/`."""
@@ -84,12 +89,12 @@ def source_gazetteer_paths() -> Tuple[Path, Path]:
     """Return canonical gazetteer paths inside the installed package."""
     base = reference_root()
     return (
-        ref_path(GAZ_LOCALE),
-        ref_path(GAZ_REGION),
+        ref_path(gaz)
+        for gaz in GAZ_PATHS 
     )
 
 def source_op_groups_path() -> Path:
-    return ref_path(OPS_GROUPS)
+    return ref_path(GAZ_GROUPS)
 
 def source_tg_channels_path() -> Path:
     return ref_path(TGM_SOURCES)
@@ -103,7 +108,12 @@ def current_root() -> Path:
     """Discover the current sitrepc2 project root (git-style)."""
     return find_repo_root()
 
-
 def current_dotpath() -> Path:
     """Return the `.sitrepc2` path for the current working project."""
     return get_dotpath(current_root())
+
+def current_gazetteer() -> Tuple[Path, ...]:
+    return (
+        current_dotpath() / gaz
+        for gaz in GAZ_PATHS
+    )

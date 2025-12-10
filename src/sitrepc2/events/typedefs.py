@@ -22,7 +22,6 @@ class ActionKind(Enum):
     WITHDRAWAL = "withdrawal"
     OTHER = "other"
 
-
 @dataclass
 class Action:
     """
@@ -30,23 +29,26 @@ class Action:
     """
     kind: ActionKind
     label: str        # taxonomy label, e.g., "artillery_shelling"
-    raw_verb: str     # verb as seen in the original event text
+    text: str     # verb as seen in the original event text
 
 
 # ---------------------------------------------------------------------------
 # Actor Entity
 # ---------------------------------------------------------------------------
+class ActorKind(Enum):
+    UNIT = "unit"
+    GROUP = "group"
+    CIVLIAN = "civilian"
+    GENERIC = "generic"
 
 @dataclass
 class Actor:
     """
     Actor involved in an event (unit, group AO, generic force, etc.).
     """
-    name: str
+    kind: ActorKind
+    text: str
     role: str = "primary"
-    is_group: bool = False
-    is_generic: bool = False
-
 
 # ---------------------------------------------------------------------------
 # Context Types
@@ -66,13 +68,40 @@ class SitRepContext:
     Scope identifies the level at which it applies.
     """
     kind: CtxKind
-    value: Any   # RegionEntry | DirectionEntry | LocaleEntry | string
-
+    value: Any   # RegionEntry | DirectionEntry | LocaleEntry
+    text: str
     # optional scoping
     location_id: Optional[str] = None
     event_id: Optional[str] = None
     section_id: Optional[str] = None
     post_id: Optional[str] = None
+    # new mistmatch flag to alert users when context has eliminated all possible candidates
+    is_mismatch: Optional[bool] = False
+    # NEW: directional / proximity anchor resolution
+    anchor: Optional[LocaleEntry] = None
+    anchor_candidates: List[LocaleEntry] = field(default_factory=list)
+
+@dataclass
+class AnchorCandidate:
+    locale: LocaleEntry
+    confidence: float = 0.0
+    scores: dict = field(default_factory=dict)
+
+@dataclass
+class Anchor:
+    """
+    A reference point required for contextualization.
+    Examples:
+        - direction anchor ("in the Avdiivka direction")
+        - proximity anchor ("near Krasnohorivka")
+    """
+    text: str                         # raw anchor text
+    candidates: List[AnchorCandidate] = field(default_factory=list)
+
+    selection: Optional[AnchorCandidate] = None
+    selection_confidence: float = 0.0
+
+    mismatch_detected: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +129,7 @@ class LocaleCandidate:
 @dataclass
 class Location:
     """
-    Represents a location mention and its full candidate set.
+    Represents a location post-nls mention and its full candidate set.
     Used in review and final resolution.
     """
     text: str                           # raw location string from event text
@@ -111,10 +140,11 @@ class Location:
 
     cluster_id: Optional[int] = None    # series grouping
     contexts: List[SitRepContext] = field(default_factory=list)
+    span: Optional[Tuple[int, int]] = None
 
 
 # ---------------------------------------------------------------------------
-# War Event Object
+# Event Object
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -133,6 +163,43 @@ class Event:
     locations: List[Location] = field(default_factory=list)
     contexts: List[SitRepContext] = field(default_factory=list)
 
-    negated: bool = False
-    uncertain: bool = False
-    involves_coreference: bool = False
+
+@dataclass
+class Section:
+    """
+    A logical subdivision of a Post.
+    Most Telegram war reports use visible or implicit sectioning to discuss
+    different directions, axes, regions, or operational zones.
+
+    Each Section:
+        • has section-level context extracted from LSS
+        • contains a sequence of Events that appear in it
+        • inherits Post-level context, but may override it
+    """
+    section_id: str
+    text: str
+    contexts: List[SitRepContext] = field(default_factory=list)
+    events: List[Event] = field(default_factory=list)
+
+@dataclass
+class Post:
+    """
+    Represents a single Telegram post after ingestion.
+
+    Holds:
+        - raw metadata
+        - raw text
+        - post-level contexts (from LSS)
+        - extracted events (filled in later by pipeline)
+    """
+    source: str
+    channel: str
+    channel_lang: str
+    post_id: str
+    published_at: str
+    fetched_at: str
+    text: str
+
+    contexts: List[SitRepContext] = field(default_factory=list)  # post-level
+    sections: List[Section] = field(default_factory=list)
+    events: List[Event] = field(default_factory=list)  # optional flat list

@@ -1,27 +1,28 @@
-wikidata,iso3166_2,name,aliases,source
-q176230,ua-32,kyiv oblast,kyivska;kiev,https://simplemaps.com
-q41079,ua-43,autonomous republic of crimea,avtonomna respublika krym;crimea;krym;avtonomnaya respublika krym;respublika krym;republic of crimea,https://simplemaps.com
-q170731,ua-05,vinnytsia oblast,vinnitskaya;vinnytsia;vinnitsya;vinnichchina,https://simplemaps.com
-q170787,ua-07,volyn oblast,volynska;volynshchina;volynskaya;volyn,https://simplemaps.com
-q168446,ua-12,dnipropetrovsk oblast,dnipropetrovsk;dnipropetrovska;dnipropetrovskya;dnepropetrovshchina;dnepropetrovsk,https://simplemaps.com
-q159828,ua-14,donetsk oblast,donetska;donetskaya;donechchyna;donetsk;donetsk peoples republic;dpr;dnr,https://simplemaps.com
-q159636,ua-18,zhytomyr oblast,zhytomyr;zhytomyrska;zhytomir;zhytomirsk;zhytomirskaya;zhitomirshchina,https://simplemaps.com
-q165329,ua-21,zakarpattia oblast,zakarpattia;zakarpattsk;zakarpatsk;zakarpatska;zakarpatsskaya,https://simplemaps.com
-q166524,ua-23,zaporizhzhia oblast,zaporizka;zaporizhzhia;zaporozhskaya;zaporozhye;zaporozhzhya,https://simplemaps.com
-q170792,ua-26,ivano-frankivsk oblast,ivano-frankivska;ivano-frankivskaya;frankivshchina;ivano-frankovsk;prikarpatya,https://simplemaps.com
-q165140,ua-35,kirovohrad oblast,kirovograd;kirovohradska;kirovohrad;kirovogradskaya;kirovogradshchina,https://simplemaps.com
-q170219,ua-09,luhansk oblast,luhanska;luhansk;luhansk peoples republic;lugansk peoples republic;lpr;lnr;luganskaya;luganshchina,https://simplemaps.com
-q170770,ua-46,lviv oblast,lvivska;lviv;lvovskaya;lvovshchina;lvov,https://simplemaps.com
-q170539,ua-48,mykolaiv oblast,mikolaiv;mikolaev;mykolaivska;mykolaiv;nikolaev;nikolaevskaya;nikolaivshchina,https://simplemaps.com
-q170408,ua-51,odesa oblast,odeska;odesa;odessa;odesskaya;odeshchina,https://simplemaps.com
-q170447,ua-53,poltava oblast,poltava,https://simplemaps.com
-q171951,ua-56,rivne oblast,rivnenska;rivne;rivnenskaya;rivnenshchina,https://simplemaps.com
-q170508,ua-59,sumy oblast,sumska;sumy;sumskaya;sumshchina,https://simplemaps.com
-q173407,ua-61,ternopil oblast,ternopilska;ternopil;ternopol;ternopilskaya;ternopilshchina,https://simplemaps.com
-q171133,ua-63,kharkiv oblast,kharkivska;kharkiv;kharkov;kharkovskaya;kharkovshchina;kharkivshchina,https://simplemaps.com
-q170315,ua-65,kherson oblast,khersonska;kherson;khersonskaya;khersonshchina,https://simplemaps.com
-q171974,ua-68,khmelnytskyi oblast,khmelnytska;khmelnytskyi;khmelnitskaya;khemlnitskya;khemlnitsk;khemlnotsk;khmelnichchyna,https://simplemaps.com
-q165273,ua-71,cherkasy oblast,cherkaska;cherkasy;cherkosy;cherkasskaya;cherkassky;cherkassy;cherkassk;cherkashchina,https://simplemaps.com
-q165432,ua-77,cherniv oblast,chernivetska;cherniv;chernov,https://simplemaps.com
-q171723,ua-74,chernivtsi oblast,chernivtsi;chernivetskaya;chernivechchyna,https://simplemaps.com
-q7525,ua-40,sevastopil,sevastopilska;sevastopil;sevastopol;sevastopilskya;sevastopolskya,https://simplemaps.com
+wikidata,iso3166_2,name,aliases,neighbors
+q170731,ua-05,vinnytsia oblast,"vinnitskaya;vinnytsia;vinnitsya;vinnichchina","zhytomyr oblast;kyiv oblast;cherkasy oblast;kirovohrad oblast;odesa oblast;khmelnytskyi oblast"
+q170787,ua-07,volyn oblast,"volynska;volynshchina;volynskaya;volyn","lviv oblast;rivne oblast"
+q170219,ua-09,luhansk oblast,"luhanska;luhansk;luhansk peoples republic;lugansk peoples republic;lpr;lnr;luganskaya;luganshchina;lugansk","kharkiv oblast;donetsk oblast"
+q168446,ua-12,dnipropetrovsk oblast,"dnipropetrovsk;dnipropetrovska;dnipropetrovskya;dnepropetrovsk;dnepropetrovshchina","poltava oblast;kharkiv oblast;donetsk oblast;zaporizhzhia oblast;kherson oblast;mykolaiv oblast;kirovohrad oblast"
+q159828,ua-14,donetsk oblast,"donetska;donetskaya;donechchyna;donetsk;donetsk peoples republic;dpr;dnr","kharkiv oblast;luhansk oblast;zaporizhzhia oblast;dnipropetrovsk oblast"
+q159636,ua-18,zhytomyr oblast,"zhytomyr;zhytomyrska;zhytomir;zhytomirsk;zhytomirskaya;zhitomirshchina","rivne oblast;khmelnytskyi oblast;vinnytsia oblast;kyiv oblast;chernihiv oblast"
+q165329,ua-21,zakarpattia oblast,"zakarpattia;zakarpattsk;zakarpatsk;zakarpatska;zakarpatsskaya;prikarpatya","lviv oblast;ivano-frankivsk oblast"
+q166524,ua-23,zaporizhzhia oblast,"zaporizka;zaporizhzhia;zaporozhskaya;zaporozhye;zaporozhzhya","dnipropetrovsk oblast;donetsk oblast;kherson oblast"
+q170792,ua-26,ivano-frankivsk oblast,"ivano-frankivska;ivano-frankivskaya;frankivshchina;ivano-frankovsk;prikarpatya","lviv oblast;zakarpattia oblast;chernivtsi oblast;khmelnytskyi oblast"
+q1899,ua-30,kyiv city autonomous city district,"kyiv autonomous city district;kiev autonomous city district;kyiv city autonomous city district;kiev city autonomous city district","kyiv oblast"
+q176230,ua-32,kyiv oblast,"kyivska;kiev;kyiv","zhytomyr oblast;vinnytsia oblast;cherkasy oblast;poltava oblast;chernihiv oblast;kyiv city autonomous city district"
+q165140,ua-35,kirovohrad oblast,"kirovograd;kirovohradska;kirovohrad;kirovogradskaya;kirovogradshchina","mykolaiv oblast;odesa oblast;vinnytsia oblast;cherkasy oblast;poltava oblast;dnipropetrovsk oblast"
+q7525,ua-40,sevastopil autonomous city district,"sevastopol autonomous city district;sevastopil autonomous city district;sevastopol city autonomous city district;sevastopil city autonomous city district","autonomous republic of crimea"
+q41079,ua-43,autonomous republic of crimea,"avtonomna respublika krym;crimea;krym;avtonomnaya respublika krym;respublika krym;republic of crimea","kherson oblast;sevastopil autonomous city district"
+q170770,ua-46,lviv oblast,"lvivska;lviv;lvovskaya;lvovshchina;lvov;lvivshchyna","volyn oblast;rivne oblast;ternopil oblast;ivano-frankivsk oblast;zakarpattia oblast"
+q170539,ua-48,mykolaiv oblast,"mykolaiv;mykolaivska;nikolaev;nikolaevskaya;nikolaivshchina","odesa oblast;kirovohrad oblast;dnipropetrovsk oblast;kherson oblast"
+q170408,ua-51,odesa oblast,"odeska;odesa;odessa;odesskaya;odeshchina","vinnytsia oblast;kirovohrad oblast;mykolaiv oblast;chernivtsi oblast"
+q170447,ua-53,poltava oblast,"poltava","sumy oblast;kharkiv oblast;dnipropetrovsk oblast;kirovohrad oblast;cherkasy oblast;kyiv oblast;chernihiv oblast"
+q171951,ua-56,rivne oblast,"rivnenska;rivne;rivnenskaya;rivnenshchina","volyn oblast;lviv oblast;ternopil oblast;khmelnytskyi oblast;zhytomyr oblast"
+q170508,ua-59,sumy oblast,"sumska;sumy;sumskaya;sumshchina","chernihiv oblast;poltava oblast;kharkiv oblast"
+q173407,ua-61,ternopil oblast,"ternopilska;ternopil;ternopol;ternopilskaya;ternopilshchina","lviv oblast;ivano-frankivsk oblast;chernivtsi oblast;khmelnytskyi oblast;rivne oblast"
+q171133,ua-63,kharkiv oblast,"kharkivska;kharkiv;kharkov;kharkovskaya;kharkovshchina;kharkivshchyna","sumy oblast;poltava oblast;dnipropetrovsk oblast;donetsk oblast;luhansk oblast"
+q170315,ua-65,kherson oblast,"khersonska;kherson;khersonskaya;khersonshchina","mykolaiv oblast;dnipropetrovsk oblast;zaporizhzhia oblast;autonomous republic of crimea"
+q171974,ua-68,khmelnytskyi oblast,"khmelnytska;khmelnytskyi;khmelnitskaya;khmelnychchyna","ternopil oblast;ivano-frankivsk oblast;chernivtsi oblast;vinnytsia oblast;zhytomyr oblast;rivne oblast"
+q165273,ua-71,cherkasy oblast,"cherkaska;cherkasy;cherkasskaya;cherkassy;cherkashchina","kyiv oblast;vinnytsia oblast;kirovohrad oblast;poltava oblast"
+q1573,ua-74,chernihiv oblast,"chernihiv;chernihivska;chernigov;chernigovskaya;chernihivshchyna","kyiv oblast;zhytomyr oblast;sumy oblast;poltava oblast"
+q171723,ua-77,chernivtsi oblast,"chernivtsi;chernivetskaya;chernivechchyna","ivano-frankivsk oblast;ternopil oblast;khmelnytskyi oblast;odesa oblast"

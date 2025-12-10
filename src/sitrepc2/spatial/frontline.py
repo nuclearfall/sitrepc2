@@ -32,22 +32,6 @@ def _collect_lines(gj: dict) -> List[List[Coord]]:
     return lines
 
 
-@dataclass(frozen=True)
-class DirectionAxis:
-    """
-    City → frontline axis for “<City> direction” scoring.
-
-    All lat/lon in WGS84 degrees.
-
-    - city_*   : the direction city (e.g., Slavyansk).
-    - anchor_* : the single chosen point on the LoC representing that direction.
-    """
-    city_lat: float
-    city_lon: float
-    anchor_lat: float
-    anchor_lon: float
-
-
 class Frontline:
     """
     Frontline distance helper.
@@ -129,79 +113,6 @@ class Frontline:
         _, loc_pt_metric = nearest_points(city_pt, self._geom)
         lon_a, lat_a = self._to_wgs84.transform(loc_pt_metric.x, loc_pt_metric.y)
         return lat_a, lon_a
-
-    def build_direction_axis(
-        self,
-        city_lat: float,
-        city_lon: float,
-    ) -> DirectionAxis | None:
-        """
-        Build a DirectionAxis for a given city.
-
-        Returns None if LoC geometry is unavailable.
-        """
-        anchor = self.anchor_for_city(city_lat, city_lon)
-        if anchor is None:
-            return None
-        anchor_lat, anchor_lon = anchor
-        return DirectionAxis(
-            city_lat=city_lat,
-            city_lon=city_lon,
-            anchor_lat=anchor_lat,
-            anchor_lon=anchor_lon,
-        )
-
-    def axis_metrics_km(
-        self,
-        axis: DirectionAxis,
-        lat: float,
-        lon: float,
-    ) -> Tuple[float, float]:
-        """
-        Compute (along_axis_km, cross_axis_km) for a point relative to a
-        City→LoC DirectionAxis.
-
-        - along_axis_km:
-            signed distance along the ray from city to anchor.
-            0 at the city, +D at the anchor, can be negative (behind city)
-            or >D (beyond frontline).
-        - cross_axis_km:
-            absolute lateral distance from the infinite city↔anchor line.
-
-        All distances are computed in the metric CRS and returned in km.
-        """
-        if self._geom is None:
-            return 0.0, float("inf")
-
-        # Transform city, anchor, and point to metric coordinates.
-        mx_c, my_c = self._to_metric.transform(axis.city_lon, axis.city_lat)
-        mx_a, my_a = self._to_metric.transform(axis.anchor_lon, axis.anchor_lat)
-        mx_p, my_p = self._to_metric.transform(lon, lat)
-
-        vx = mx_a - mx_c
-        vy = my_a - my_c
-        wx = mx_p - mx_c
-        wy = my_p - my_c
-
-        v_len = math.hypot(vx, vy)
-        if v_len == 0.0:
-            # Degenerate: city and anchor collapse. Treat as pure distance to city.
-            along_m = 0.0
-            cross_m = math.hypot(wx, wy)
-            return along_m / 1000.0, cross_m / 1000.0
-
-        # Scalar projection parameter t along the city→anchor vector.
-        # t = 0 at city, t = 1 at anchor.
-        t = (wx * vx + wy * vy) / (v_len * v_len)
-
-        # Projection point on the infinite line.
-        proj_x = mx_c + t * vx
-        proj_y = my_c + t * vy
-
-        along_m = t * v_len                  # signed: <0 behind, >v_len beyond
-        cross_m = math.hypot(mx_p - proj_x, my_p - proj_y)
-
-        return along_m / 1000.0, cross_m / 1000.0
 
 
 def load_frontline(
