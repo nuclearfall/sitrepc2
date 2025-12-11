@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from importlib.resources import files
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional, Tuple
 
 
 # ---------------------------------------------------------------------------
@@ -82,16 +82,14 @@ def reference_root() -> Path:
     """
     return Path(files("sitrepc2") / "reference")
 
-def ref_path(path: str|Path) -> Path
+
+def ref_path(path: str | Path) -> Path:
     return reference_root() / path
 
-def source_gazetteer_paths() -> Tuple[Path, Path]:
+
+def source_gazetteer_paths() -> Tuple[Path, Path, Path]:
     """Return canonical gazetteer paths inside the installed package."""
-    base = reference_root()
-    return (
-        ref_path(gaz)
-        for gaz in GAZ_PATHS 
-    )
+    return tuple(ref_path(gaz) for gaz in GAZ_PATHS)
 
 def source_op_groups_path() -> Path:
     return ref_path(GAZ_GROUPS)
@@ -113,7 +111,4 @@ def current_dotpath() -> Path:
     return get_dotpath(current_root())
 
 def current_gazetteer() -> Tuple[Path, ...]:
-    return (
-        current_dotpath() / gaz
-        for gaz in GAZ_PATHS
-    )
+    return tuple(current_dotpath() / gaz for gaz in GAZ_PATHS)
