@@ -1,23 +1,22 @@
+# src/sitrepc2/config/__init__.py
 """
-Configuration and path helpers for sitrepc2.
+Configuration utilities for sitrepc2.
 """
 
 from .paths import (
     find_repo_root,
     get_dotpath,
-    gazetteer_paths,
-    get_lexicon,
+    dot_path,
+    db_path,
+    current_db_path,
+    lexicon_path,
+    tg_channels_path,
     reference_root,
-    source_gazetteer_paths,
+    ref_path,
+    source_gazetteer_paths,   # Optional: still exists for seeding DB
+    source_op_groups_path,
+    source_tg_channels_path,
     source_lexicon_path,
+    current_root,
+    current_dotpath,
 )
-
-__all__ = [
-    "find_repo_root",
-    "get_dotpath",
-    "gazetteer_paths",
-    "get_lexicon",
-    "reference_root",
-    "source_gazetteer_paths",
-    "source_lexicon_path",
-]
