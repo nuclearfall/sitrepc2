@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# sitrepc2.nlp.pipeline
+# sitrepc2.lss.pipeline
 # ---------------------------------------------------------------------------
 
 from __future__ import annotations
@@ -11,22 +11,24 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from spacy.tokens import Doc
     from holmes_extractor import Manager
- 
+
 from sitrepc2.dom.typedefs import Post, Section, Event
 from sitrepc2.lss.typedefs import EventMatch
 from sitrepc2.lss.sectioning import split_into_sections
-from sitrepc2.lss.context import (   
+from sitrepc2.lss.context import (
     extract_post_contexts,
-    extract_section_contexts
+    extract_section_contexts,
 )
 from sitrepc2.lss.events import (
     build_word_matches,
     compute_doc_span_from_raw_word_matches,
 )
-from sitrepc2.lss.ruler import add_entity_ruler
 from sitrepc2.lss.lss_scoping import lss_scope_event
 from sitrepc2.lss.bootstrap import build_manager
 from sitrepc2.lss.phrases import register_search_phrases
+
+# NEW: DB-backed entity ruler
+from sitrepc2.lss.rulers import add_entity_rulers_from_db
 
 
 # ===========================================================================
@@ -35,11 +37,21 @@ from sitrepc2.lss.phrases import register_search_phrases
 
 def build_holmes_and_nlp() -> Manager:
     """
-    Constructs the Holmes Manager with entity ruler and search phrases.
+    Constructs the Holmes Manager with:
+
+      • spaCy pipeline initialized by build_manager()
+      • gazetteer-backed EntityRuler patterns loaded from SQLite
+      • registered Holmes search phrases
     """
     manager = build_manager()
-    manager.nlp = add_entity_ruler(manager.nlp)
+
+    # Install gazetteer entity rulers (LOCALE / REGION / GROUP / DIRECTION)
+    # directly from the SQLite gazetteer tables.
+    manager.nlp = add_entity_rulers_from_db(manager.nlp)
+
+    # Register Holmes search phrases (verb patterns etc.)
     register_search_phrases(manager)
+
     return manager
 
 
@@ -56,9 +68,10 @@ def run_nlp_pipeline(
 ) -> Dict[str, Post]:
     """
     Full NLP pipeline.
-    
+
     Input:
         posts: Sequence[Post]
+
     Output:
         dict[post_id, Post] where each Post contains:
             • post.contexts
@@ -127,7 +140,9 @@ def run_nlp_pipeline(
                 post_id=post_id,
                 label=m.get("search_phrase_label", ""),
                 search_phrase_text=str(m.get("search_phrase_text", "") or ""),
-                sentences_within_document=str(m.get("sentences_within_document", "") or ""),
+                sentences_within_document=str(
+                    m.get("sentences_within_document", "") or ""
+                ),
                 overall_similarity=overall_similarity,
                 negated=bool(m.get("negated", False)),
                 uncertain=bool(m.get("uncertain", False)),
@@ -171,7 +186,7 @@ def run_nlp_pipeline(
 # EVENT → SECTION ASSIGNMENT
 # ===========================================================================
 
-def _place_event_into_structure(doc: Doc, post: Post, hem: EventMatch):
+def _place_event_into_structure(doc: "Doc", post: Post, hem: EventMatch):
     """
     Uses LSS to build Event, then assigns it into the correct Section.
     """
@@ -217,5 +232,5 @@ def _place_event_into_structure(doc: Doc, post: Post, hem: EventMatch):
         if post.sections:
             post.sections[0].events.append(event)
 
-    # Optionally push flat event list
+    # flat event list on Post
     post.events.append(event)
