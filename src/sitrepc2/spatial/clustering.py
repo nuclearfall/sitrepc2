@@ -20,7 +20,7 @@ from sitrepc2.dom.typedefs import Location, LocaleCandidate
 class ClusterScoring:
     """
     Configurable scoring parameters for unary and pairwise scoring.
-    Defaults are set to match the original MIP behaviour.
+    Defaults tuned to maintain the original MIP behaviour.
     """
 
     # Unary contributions
@@ -64,13 +64,13 @@ class ClusterChoice:
 # =====================================================
 
 def _coord(cand: LocaleCandidate) -> Tuple[float, float]:
-    """Return (lat, lon) from the LocaleEntry contained inside the candidate."""
+    """Return (lat, lon) for the locale represented by the candidate."""
     loc: LocaleEntry = cand.locale
     return float(loc.lat), float(loc.lon)
 
 
 def _qid(cand: LocaleCandidate) -> Optional[str]:
-    """Return Wikidata QID if available."""
+    """Return wikidata QID if present."""
     q = getattr(cand.locale, "wikidata", None)
     return q or None
 
@@ -86,31 +86,33 @@ def _cluster_bbox_diagonal(coords: Sequence[Tuple[float, float]]) -> float:
 def _cluster_centroid(coords: Dict[int, Tuple[float, float]]) -> Tuple[float, float]:
     if not coords:
         return (0.0, 0.0)
-    lat = sum(c[0] for c in coords.values()) / len(coords)
-    lon = sum(c[1] for c in coords.values()) / len(coords)
+    lat = sum(v[0] for v in coords.values()) / len(coords)
+    lon = sum(v[1] for v in coords.values()) / len(coords)
     return lat, lon
 
 
 def _median_pairwise(coords: Dict[int, Tuple[float, float]]) -> float:
-    """Median pairwise distance, robust compactness metric."""
+    """Median pairwise geographic distance."""
     keys = list(coords.keys())
     N = len(keys)
     if N <= 1:
         return 0.0
+
     dists = []
     for i in range(N):
         lat_i, lon_i = coords[keys[i]]
-        for j in range(i+1, N):
+        for j in range(i + 1, N):
             lat_j, lon_j = coords[keys[j]]
             dists.append(haversine_km(lat_i, lon_i, lat_j, lon_j))
+
     return median(dists) if dists else 0.0
 
 
 def _compute_structural_outliers(assignments: Dict[int, LocaleCandidate]) -> List[int]:
     """
-    Structural outlier = removing that location dramatically tightens the cluster.
+    Identify structural outliers: those whose removal significantly tightens compactness.
     """
-    coords = {mid: _coord(c) for mid, c in assignments.items()}
+    coords = {lid: _coord(c) for lid, c in assignments.items()}
     if len(coords) <= 2:
         return []
 
@@ -118,17 +120,21 @@ def _compute_structural_outliers(assignments: Dict[int, LocaleCandidate]) -> Lis
     if base_compact <= 0:
         return []
 
-    out = []
-    for mid in list(coords.keys()):
+    outliers = []
+    for lid in list(coords.keys()):
         reduced = dict(coords)
-        reduced.pop(mid, None)
+        reduced.pop(lid, None)
+
         if len(reduced) <= 1:
             continue
-        reduced_compact = _median_pairwise(reduced)
-        improvement = base_compact - reduced_compact
+
+        new_compact = _median_pairwise(reduced)
+        improvement = base_compact - new_compact
+
         if improvement > 5.0 and improvement / base_compact > 0.35:
-            out.append(mid)
-    return out
+            outliers.append(lid)
+
+    return outliers
 
 
 # =====================================================
@@ -137,22 +143,22 @@ def _compute_structural_outliers(assignments: Dict[int, LocaleCandidate]) -> Lis
 
 def unary_score(cand: LocaleCandidate, scoring: ClusterScoring) -> float:
     """
-    Compute unary score: frontline + direction.
-    cand.distance_from_frontline_km
-    cand.scores["dir_cross_km"], cand.scores["dir_along_km"] if available.
+    Compute unary score from:
+      - frontline distance
+      - direction alignment (cross & along axes)
     """
 
     score = 0.0
 
-    # Frontline: closer = better.
+    # Frontline proximity: closer = better
     dfl = getattr(cand, "distance_from_frontline_km", None)
     if dfl is not None:
-        # Negative slope: closer gives higher score.
         score += scoring.frontline_weight * max(0.0, 50.0 - dfl) / 50.0
 
-    # Direction scoring (if available)
-    cross = cand.scores.get("dir_cross_km")
-    along = cand.scores.get("dir_along_km")
+    # Direction scoring
+    cross = cand.scores.get("dir_cross_km") if hasattr(cand, "scores") else None
+    along = cand.scores.get("dir_along_km") if hasattr(cand, "scores") else None
+
     if cross is not None:
         if cross <= 8:
             lat_term = 1.0
@@ -176,31 +182,31 @@ def pairwise_score(
     scoring: ClusterScoring,
 ) -> float:
     """
-    Pairwise coherence:
-      - region alignment
-      - ru_group alignment
-      - geographic compactness
+    Pairwise coherence score:
+      - region match
+      - RU group match
+      - compactness
     """
     score = 0.0
-    a, b = cand_a.locale, cand_b.locale
+    loc_a, loc_b = cand_a.locale, cand_b.locale
 
     # Region coherence
-    if a.region and b.region:
-        if a.region == b.region:
+    if loc_a.region and loc_b.region:
+        if loc_a.region == loc_b.region:
             score += scoring.region_same_weight
         else:
             score -= scoring.region_mismatch_penalty
 
     # RU group coherence
-    if a.ru_group and b.ru_group:
-        if a.ru_group == b.ru_group:
+    if loc_a.ru_group and loc_b.ru_group:
+        if loc_a.ru_group == loc_b.ru_group:
             score += scoring.ru_same_weight
         else:
             score -= scoring.ru_mismatch_penalty
 
-    # Geometric compactness
-    (lat_a, lon_a) = _coord(cand_a)
-    (lat_b, lon_b) = _coord(cand_b)
+    # Geographic compactness
+    lat_a, lon_a = _coord(cand_a)
+    lat_b, lon_b = _coord(cand_b)
     d = haversine_km(lat_a, lon_a, lat_b, lon_b)
 
     if d <= scoring.close_km:
@@ -219,27 +225,27 @@ def partial_assignment_score(
     scoring: ClusterScoring
 ) -> float:
     """
-    Compute total score for a partial assignment using all unary terms and
-    pairwise terms where both sides are already assigned.
+    Score a partial assignment using all unary terms and pairwise
+    interactions among assigned variables only.
     """
     total = 0.0
 
-    # Unary
+    # Unary contributions
     for c in assignment.values():
         total += unary_score(c, scoring)
 
-    # Pairwise
+    # Pairwise contributions
     keys = list(assignment.keys())
     N = len(keys)
     for i in range(N):
-        for j in range(i+1, N):
+        for j in range(i + 1, N):
             total += pairwise_score(assignment[keys[i]], assignment[keys[j]], scoring)
 
     return total
 
 
 # =====================================================
-#  MAIN BEAM-SEARCH CLUSTERING ALGORITHM
+#  MAIN BEAM-SEARCH CLUSTERING
 # =====================================================
 
 def cluster_locations(
@@ -250,29 +256,37 @@ def cluster_locations(
     max_bbox_km: float = 30.0,
 ) -> Optional[ClusterChoice]:
     """
-    Resolve one candidate per Location using a deterministic beam-search.
-    Returns ClusterChoice(assignments, score, diagnostics) or None.
+    Deterministic beam-search over candidate assignments:
+    returns best ClusterChoice(assignments, score, diagnostics) or None.
     """
 
-    # Filter to only locations with candidates.
-    usable = [(idx, loc) for idx, loc in enumerate(locations) if loc.candidates]
+    # Filter: only locations with candidates
+    usable = [(i, loc) for i, loc in enumerate(locations) if loc.candidates]
     if not usable:
         return None
 
-    # Identify anchors (only 1 candidate).
-    anchors = {idx: loc.candidates[0] for idx, loc in usable if len(loc.candidates) == 1}
+    # Identify anchors (fixed assignments)
+    anchors = {
+        idx: loc.candidates[0]
+        for idx, loc in usable
+        if len(loc.candidates) == 1
+    }
     variables = [(idx, loc) for idx, loc in usable if idx not in anchors]
 
-    # Beam starts with a single partial assignment = anchors.
-    beam: List[Tuple[Dict[int, LocaleCandidate], float]] = [(anchors, partial_assignment_score(anchors, scoring))]
+    # Initialize beam with anchor-only assignment
+    beam: List[Tuple[Dict[int, LocaleCandidate], float]] = [
+        (anchors, partial_assignment_score(anchors, scoring))
+    ]
 
-    # Expand beam for each variable location.
+    # Expand beam
     for idx, loc in variables:
         new_beam = []
-        for assignment, score_so_far in beam:
+
+        for assignment, current_score in beam:
             for cand in loc.candidates:
                 new_assign = dict(assignment)
                 new_assign[idx] = cand
+
                 scr = partial_assignment_score(new_assign, scoring)
                 new_beam.append((new_assign, scr))
 
@@ -286,7 +300,7 @@ def cluster_locations(
     # Best full assignment
     best_assignment, best_score = beam[0]
 
-    # Compute diagnostics
+    # Diagnostics
     coords = [_coord(c) for c in best_assignment.values()]
     bbox = _cluster_bbox_diagonal(coords)
     bbox_is_large = bbox > max_bbox_km
@@ -294,8 +308,7 @@ def cluster_locations(
     centroid = _cluster_centroid({i: _coord(c) for i, c in best_assignment.items()})
     outliers = []
     for i, cand in best_assignment.items():
-        lat, lon = _coord(cand)
-        d = haversine_km(lat, lon, centroid[0], centroid[1])
+        d = haversine_km(_coord(cand)[0], _coord(cand)[1], centroid[0], centroid[1])
         if d > max_bbox_km:
             outliers.append(i)
 
@@ -307,25 +320,25 @@ def cluster_locations(
             qid_groups.setdefault(q, []).append(i)
     dupes = {k: v for k, v in qid_groups.items() if len(v) > 1}
 
-    # Structural outliers
-    structural = _compute_structural_outliers(best_assignment)
+    structural_outliers = _compute_structural_outliers(best_assignment)
 
     diagnostics = ClusterDiagnostics(
         bbox_diagonal_km=bbox,
         bbox_is_large=bbox_is_large,
         outlier_location_ids=outliers,
         duplicate_qid_groups=dupes,
-        structural_outlier_ids=structural,
+        structural_outlier_ids=structural_outliers,
     )
 
-    # Assign confidences using unary + pairwise against final cluster
+    # Assign confidence scores to each candidate
     for i, cand in best_assignment.items():
         unary = unary_score(cand, scoring)
         pair = 0.0
+
         for j, other in best_assignment.items():
-            if i == j:
-                continue
-            pair += pairwise_score(cand, other, scoring)
+            if i != j:
+                pair += pairwise_score(cand, other, scoring)
+
         cand.confidence = unary + pair
 
     return ClusterChoice(best_assignment, best_score, diagnostics)
