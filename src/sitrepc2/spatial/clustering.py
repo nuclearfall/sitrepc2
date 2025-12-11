@@ -8,7 +8,8 @@ from statistics import median
 from math import inf
 
 from sitrepc2.spatial.distance import haversine_km
-from sitrepc2.nlp.typedefs import Location, LocaleCandidate, LocaleEntry
+from sitrepc2.gazetteer.typedefs import LocaleEntry
+from sitrepc2.dom.typedefs import Location, LocaleCandidate
 
 
 # =====================================================
