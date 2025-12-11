@@ -4,7 +4,9 @@ from __future__ import annotations
 import typer
 
 from .init_cmd import app as init_app
+from .db_cmd import app as db_app
 
 app = typer.Typer(help="sitrepc2 command line interface")
 
 app.add_typer(init_app, name="init")
+app.add_typer(db_app, name="db")

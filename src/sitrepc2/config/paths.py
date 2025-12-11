@@ -5,7 +5,6 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Optional, Tuple
 
-
 # ---------------------------------------------------------------------------
 # 1. Detect project root (git-style)
 # ---------------------------------------------------------------------------
@@ -15,10 +14,8 @@ DOTDIR_NAME = ".sitrepc2"
 
 def find_repo_root(start: Optional[Path] = None) -> Path:
     """
-    Starting from `start` (or cwd), walk upward until a `.sitrepc2` directory
-    is found. Return that directory's parent as the repo root.
-
-    If none is found, raise an error — the user must run `sitrepc2 init`.
+    Locate the project root by walking upward until a `.sitrepc2/` directory
+    is found. This matches the original sitrepc2 workspace initialization model.
     """
     start = start or Path.cwd()
     p = start.resolve()
@@ -34,52 +31,51 @@ def find_repo_root(start: Optional[Path] = None) -> Path:
 
 
 def get_dotpath(root: Path) -> Path:
-    """Return the `.sitrepc2` directory for the given project root."""
     return root / DOTDIR_NAME
 
+
 def dot_path(root: Path, path: str | Path) -> Path:
-    """Return a path inside the project's `.sitrepc2/` directory."""
     return get_dotpath(root) / path
 
 
 # ---------------------------------------------------------------------------
-# 2. Workspace paths (mutable copies in .sitrepc2/)
+# 2. Database paths (new primary persistence layer)
 # ---------------------------------------------------------------------------
 
-GAZ_LOCALE = "locale_lookup.csv"
-GAZ_REGION = "region_lookup.csv"
-GAZ_GROUPS = "group_lookup.csv"
-# GAZ_FEATURES = "features_expanded.csv"
+DB_NAME = "sitrepc2.db"
+
+def db_path(root: Path) -> Path:
+    """Return the SQLite database path inside `.sitrepc2/`."""
+    return dot_path(root, DB_NAME)
+
+
+def current_db_path() -> Path:
+    """Convenience wrapper: SQLite database for the current project."""
+    return db_path(find_repo_root())
+
+
+# ---------------------------------------------------------------------------
+# 3. Workspace paths still relevant (lexicon, tg sources)
+# ---------------------------------------------------------------------------
+
 LEX_JSON = "war_lexicon.json"
 TGM_SOURCES = "tg_channels.jsonl"
-GAZ_PATHS = (
-    GAZ_LOCALE,
-    GAZ_REGION,
-    GAZ_GROUPS,
-)
 
-
-def op_groups_path(root: Path) -> Path:
-    """Return workspace operational group AO path in `.sitrepc2/`."""
-    return dot_path(root, GAZ_GROUPS)
 
 def lexicon_path(root: Path) -> Path:
-    """Return workspace lexicon path in `.sitrepc2/`."""
     return dot_path(root, LEX_JSON)
 
+
 def tg_channels_path(root: Path) -> Path:
-    """Return workspace Telegram channel list path in `.sitrepc2/`."""
     return dot_path(root, TGM_SOURCES)
 
+
 # ---------------------------------------------------------------------------
-# 3. Canonical reference files (read-only inside installed package)
+# 4. Canonical reference files (still used for seeding DB)
 # ---------------------------------------------------------------------------
 
 def reference_root() -> Path:
-    """
-    Returns the directory containing the canonical reference data shipped
-    inside the installed sitrepc2 package.
-    """
+    """Directory containing canonical reference data inside the package."""
     return Path(files("sitrepc2") / "reference")
 
 
@@ -87,28 +83,63 @@ def ref_path(path: str | Path) -> Path:
     return reference_root() / path
 
 
+# -- Canonical CSVs (optional, used mostly for import scripts) --
+
+GAZ_LOCALE = "locale_lookup.csv"
+GAZ_REGION = "region_lookup.csv"
+GAZ_GROUPS = "group_lookup.csv"
+GAZ_DIRECTIONS = "direction_lookup.csv"
+
+# Retain these ONLY as source materials for DB seeding
+GAZ_PATHS = (GAZ_LOCALE, GAZ_REGION, GAZ_GROUPS, GAZ_DIRECTIONS)
+
+
 def source_gazetteer_paths() -> Tuple[Path, Path, Path]:
-    """Return canonical gazetteer paths inside the installed package."""
+    """Return the canonical CSV paths *shipped with the package*."""
     return tuple(ref_path(gaz) for gaz in GAZ_PATHS)
+
 
 def source_op_groups_path() -> Path:
     return ref_path(GAZ_GROUPS)
 
+
 def source_tg_channels_path() -> Path:
     return ref_path(TGM_SOURCES)
 
+
 def source_lexicon_path() -> Path:
-    """Return canonical lexicon path inside the installed package."""
     return ref_path(LEX_JSON)
 
 
+# ---------------------------------------------------------------------------
+# 5. Current workspace discovery helpers
+# ---------------------------------------------------------------------------
+
 def current_root() -> Path:
-    """Discover the current sitrepc2 project root (git-style)."""
     return find_repo_root()
 
+
 def current_dotpath() -> Path:
-    """Return the `.sitrepc2` path for the current working project."""
     return get_dotpath(current_root())
 
-def current_gazetteer() -> Tuple[Path, ...]:
-    return tuple(current_dotpath() / gaz for gaz in GAZ_PATHS)
+
+# This previously surfaced CSV workspace copies — now removed.
+# SQLite is the primary persistence layer, so CSV material does not appear here.
+#
+# def current_gazetteer() -> Tuple[Path, ...]:
+#     return tuple(current_dotpath() / gaz for gaz in GAZ_PATHS)
+def source_region_lookup_path() -> Path:
+    return ref_path(GAZ_REGION)
+
+
+def source_group_lookup_path() -> Path:
+    return ref_path(GAZ_GROUPS)
+
+
+def source_locale_lookup_path() -> Path:
+    return ref_path(GAZ_LOCALE)
+
+
+def source_direction_lookup_path() -> Path:
+    return ref_path(GAZ_DIRECTIONS)
+
