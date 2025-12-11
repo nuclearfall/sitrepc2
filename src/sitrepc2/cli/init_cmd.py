@@ -6,20 +6,14 @@ import shutil
 
 import typer
 
-from sitrepc2.config.paths import (
-    find_repo_root,
-    get_dotpath,
-    reference_root,
-    source_gazetteer_paths,
-    source_lexicon_path,
-)
+from sitrepc2.config.paths import get_dotpath, reference_root
 app = typer.Typer()
 
 
 @app.command()
 def init(path: Path = Path(".")):
     project_root = path.resolve()
-    dot = project_dotpath(project_root)           # e.g. project_root / ".sitrepc2"
+    dot = get_dotpath(project_root)  # e.g. project_root / ".sitrepc2"
     dot.mkdir(parents=True, exist_ok=True)
 
     src_root = reference_root()
