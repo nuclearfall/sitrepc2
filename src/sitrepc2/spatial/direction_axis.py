@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Sequence, Optional
 
 from sitrepc2.spatial.distance import haversine_km
-from sitrepc2.events.typedefs import LocaleCandidate, Location, Event
+from sitrepc2.dom.typedefs import LocaleCandidate, Location, Event
 from sitrepc2.gazetteer.typedefs import LocaleEntry
 
 

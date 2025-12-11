@@ -4,6 +4,10 @@
 		"selected_items":
 		[
 			[
+				"region",
+				"region_names"
+			],
+			[
 				"defa",
 				"default_aliases_field"
 			],
@@ -510,47 +514,11 @@
 			[
 				"eleme",
 				"element_changed"
-			],
-			[
-				"Geometr",
-				"GeometrySetter"
 			]
 		]
 	},
 	"buffers":
 	[
-		{
-			"file": "src/sitrepc2/spatial/direction_axis.py",
-			"settings":
-			{
-				"buffer_size": 4054,
-				"encoding": "UTF-8",
-				"line_ending": "Unix"
-			},
-			"undo_stack":
-			[
-				[
-					3,
-					1,
-					"revert",
-					null,
-					"AgAAAAAAAAAAAAAAAAAAAAAAAADYDwAAIyBzcmMvc2l0cmVwYzIvc3BhdGlhbC9kaXJlY3Rpb25fYXhpcy5weQoKZnJvbSBfX2Z1dHVyZV9fIGltcG9ydCBhbm5vdGF0aW9ucwpmcm9tIGRhdGFjbGFzc2VzIGltcG9ydCBkYXRhY2xhc3MKZnJvbSB0eXBpbmcgaW1wb3J0IFNlcXVlbmNlLCBPcHRpb25hbAoKZnJvbSBzaXRyZXBjMi5zcGF0aWFsLmRpc3RhbmNlIGltcG9ydCBoYXZlcnNpbmVfa20KZnJvbSBzaXRyZXBjMi5ldmVudHMudHlwZWRlZnMgaW1wb3J0IExvY2FsZUNhbmRpZGF0ZSwgTG9jYXRpb24sIEV2ZW50CmZyb20gc2l0cmVwYzIuZ2F6ZXR0ZWVyLnR5cGVkZWZzIGltcG9ydCBMb2NhbGVFbnRyeQoKCkBkYXRhY2xhc3MoZnJvemVuPVRydWUpCmNsYXNzIERpcmVjdGlvbkF4aXM6CiAgICAiIiIKICAgIEEgZ2VvbWV0cmljIGF4aXMgZGVmaW5lZCBieToKICAgICAgICAtIG9yaWdpbiAobGF0LCBsb24pICAgICAgPSBkaXJlY3Rpb24gY2l0eQogICAgICAgIC0gdmVjdG9yIChkbGF0LCBkbG9uKSAgICA9IG5vcm1hbGl6ZWQgZGlyZWN0aW9uIHRvd2FyZCB0aGUgZnJvbnRsaW5lCiAgICAiIiIKICAgIG9yaWdpbl9sYXQ6IGZsb2F0CiAgICBvcmlnaW5fbG9uOiBmbG9hdAogICAgZGxhdDogZmxvYXQKICAgIGRsb246IGZsb2F0CgoKIyAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KIyBJbnRlcm5hbCBoZWxwZXJzCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCgpkZWYgX25vcm1hbGl6ZV92ZWN0b3IoZGxhdDogZmxvYXQsIGRsb246IGZsb2F0KSAtPiB0dXBsZVtmbG9hdCwgZmxvYXRdOgogICAgbWFnID0gKGRsYXQqKjIgKyBkbG9uKioyKSAqKiAwLjUKICAgIGlmIG1hZyA9PSAwOgogICAgICAgIHJldHVybiAoMC4wLCAwLjApCiAgICByZXR1cm4gKGRsYXQgLyBtYWcsIGRsb24gLyBtYWcpCgoKZGVmIF9wcm9qZWN0X3RvX2F4aXMoYXhpczogRGlyZWN0aW9uQXhpcywgbGF0OiBmbG9hdCwgbG9uOiBmbG9hdCkgLT4gdHVwbGVbZmxvYXQsIGZsb2F0XToKICAgICIiIgogICAgQ29tcHV0ZSAoYWxvbmdfa20sIGNyb3NzX2ttKSBmb3IgYSBwb2ludCByZWxhdGl2ZSB0byB0aGUgYXhpcy4KICAgIFVzZXMgaGF2ZXJzaW5lIGRpc3RhbmNlcyB0byBhcHByb3hpbWF0ZSBwcm9qZWN0aW9uIG1hZ25pdHVkZXMuCiAgICAiIiIKICAgICMgQ29udmVydCBldmVyeXRoaW5nIGludG8gbG9jYWwgb2Zmc2V0cyByZWxhdGl2ZSB0byBvcmlnaW4KICAgICMgzpRsYXQsIM6UbG9uIGJ1dCB1c2luZyBrbSBhbG9uZyBlYWNoIGNhcmRpbmFsIGF4aXMuCiAgICAjIFRoaXMgYXZvaWRzIG5lZWRpbmcgZnVsbCAzRCB2ZWN0b3JzLgogICAgb3JpZ2luID0gKGF4aXMub3JpZ2luX2xhdCwgYXhpcy5vcmlnaW5fbG9uKQoKICAgICMgU21hbGwgZGlzcGxhY2VtZW50cyBpbiBrbQogICAgbm9ydGhfa20gPSBoYXZlcnNpbmVfa20ob3JpZ2luWzBdLCBvcmlnaW5bMV0sIGxhdCwgb3JpZ2luWzFdKQogICAgZWFzdF9rbSAgPSBoYXZlcnNpbmVfa20ob3JpZ2luWzBdLCBvcmlnaW5bMV0sIG9yaWdpblswXSwgbG9uKQoKICAgICMgcmVzdG9yZSBzaWduCiAgICBpZiBsYXQgPCBheGlzLm9yaWdpbl9sYXQ6CiAgICAgICAgbm9ydGhfa20gPSAtbm9ydGhfa20KICAgIGlmIGxvbiA8IGF4aXMub3JpZ2luX2xvbjoKICAgICAgICBlYXN0X2ttID0gLWVhc3Rfa20KCiAgICAjIExvY2FsIHBvaW50IGluIHRoZSAyRCBwbGFuZQogICAgcHgsIHB5ID0gbm9ydGhfa20sIGVhc3Rfa20KICAgIHZ4LCB2eSA9IGF4aXMuZGxhdCwgYXhpcy5kbG9uICAjIGRpcmVjdGlvbiB2ZWN0b3IgaW4gc2FtZSBzcGFjZQoKICAgICMgcHJvamVjdGlvbiBsZW5ndGggKGRvdCBwcm9kdWN0KQogICAgYWxvbmcgPSBweCAqIHZ4ICsgcHkgKiB2eQoKICAgICMgcGVycGVuZGljdWxhciBkaXN0YW5jZSA9IHxQIC0gcHJvaihQKXwgPSB8UCAtIGFsb25nICogdnwKICAgIHByb2pfeCA9IGFsb25nICogdngKICAgIHByb2pfeSA9IGFsb25nICogdnkKICAgIGNyb3NzID0gKChweCAtIHByb2pfeCkqKjIgKyAocHkgLSBwcm9qX3kpKioyKSoqMC41CgogICAgcmV0dXJuIGFsb25nLCBjcm9zcwoKCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCiMgUFVCTElDIEFQSQojIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQoKZGVmIGJ1aWxkX2RpcmVjdGlvbl9heGlzKGZyb250bGluZSwgZGlyZWN0aW9uX2NpdHk6IExvY2FsZUVudHJ5KSAtPiBEaXJlY3Rpb25BeGlzOgogICAgIiIiCiAgICBCdWlsZCB0aGUgZGlyZWN0aW9uIGF4aXMgZnJvbSB0aGUgZGlyZWN0aW9uIGNpdHkgdG93YXJkIHRoZSBjbG9zZXN0CiAgICBwb2ludCBvbiB0aGUgZnJvbnRsaW5lLgogICAgIiIiCiAgICBsYXQwID0gZGlyZWN0aW9uX2NpdHkubGF0CiAgICBsb24wID0gZGlyZWN0aW9uX2NpdHkubG9uCgogICAgIyBHZXQgbmVhcmVzdCBwb2ludCBvbiBmcm9udGxpbmUgZ2VvbWV0cnkKICAgIG5lYXJfbGF0LCBuZWFyX2xvbiA9IGZyb250bGluZS5jbG9zZXN0X3BvaW50KGxhdDAsIGxvbjApCgogICAgZGxhdCA9IG5lYXJfbGF0IC0gbGF0MAogICAgZGxvbiA9IG5lYXJfbG9uIC0gbG9uMAogICAgbmRsYXQsIG5kbG9uID0gX25vcm1hbGl6ZV92ZWN0b3IoZGxhdCwgZGxvbikKCiAgICByZXR1cm4gRGlyZWN0aW9uQXhpcyhvcmlnaW5fbGF0PWxhdDAsIG9yaWdpbl9sb249bG9uMCwgZGxhdD1uZGxhdCwgZGxvbj1uZGxvbikKCgpkZWYgYW5ub3RhdGVfZGlyZWN0aW9uX2F4aXNfZm9yX2NhbmRpZGF0ZXMoCiAgICBheGlzOiBEaXJlY3Rpb25BeGlzLAogICAgY2FuZGlkYXRlczogU2VxdWVuY2VbTG9jYWxlQ2FuZGlkYXRlXSwKICAgICosCiAgICBsYWJlbDogc3RyIHwgTm9uZSA9IE5vbmUsCikgLT4gTm9uZToKICAgICIiIgogICAgTXV0YXRlcyBlYWNoIExvY2FsZUNhbmRpZGF0ZSdzIC5zY29yZXMgd2l0aDoKICAgICAgICBkaXJfY3Jvc3Nfa20KICAgICAgICBkaXJfYWxvbmdfa20KICAgICIiIgogICAgZm9yIGNhbmQgaW4gY2FuZGlkYXRlczoKICAgICAgICBsYXQgPSBjYW5kLmxvY2FsZS5sYXQKICAgICAgICBsb24gPSBjYW5kLmxvY2FsZS5sb24KCiAgICAgICAgYWxvbmcsIGNyb3NzID0gX3Byb2plY3RfdG9fYXhpcyhheGlzLCBsYXQsIGxvbikKICAgICAgICBjYW5kLnNjb3Jlc1siZGlyX2Nyb3NzX2ttIl0gPSBjcm9zcwogICAgICAgIGNhbmQuc2NvcmVzWyJkaXJfYWxvbmdfa20iXSA9IGFsb25nCiAgICAgICAgaWYgbGFiZWw6CiAgICAgICAgICAgIGNhbmQuc2NvcmVzWyJkaXJfbGFiZWwiXSA9IGxhYmVsCgoKZGVmIGFubm90YXRlX2RpcmVjdGlvbl9heGlzX2Zvcl9ldmVudCgKICAgIGV2ZW50OiBFdmVudCwKICAgIGZyb250bGluZSwKICAgIGRpcmVjdGlvbl9jaXR5OiBMb2NhbGVFbnRyeSwKICAgICosCiAgICBsYWJlbDogc3RyIHwgTm9uZSA9IE5vbmUsCikgLT4gT3B0aW9uYWxbRGlyZWN0aW9uQXhpc106CiAgICAiIiIKICAgIENvbXB1dGUgZGlyZWN0aW9uIGF4aXMgZm9yIGFuIGVudGlyZSBldmVudCwgYW5ub3RhdGUgYWxsIGNhbmRpZGF0ZXMuCiAgICBSZXR1cm4gdGhlIERpcmVjdGlvbkF4aXMgb3IgTm9uZSBpZiBldmVudCBoYXMgbm8gY2FuZGlkYXRlIGxvY2F0aW9ucy4KICAgICIiIgogICAgIyBDb2xsZWN0IGFsbCBjYW5kaWRhdGVzIGFjcm9zcyBhbGwgTG9jYXRpb24gb2JqZWN0cwogICAgYWxsX2NhbmRpZGF0ZXMgPSBbXQogICAgZm9yIGxvYyBpbiBldmVudC5sb2NhdGlvbnM6CiAgICAgICAgYWxsX2NhbmRpZGF0ZXMuZXh0ZW5kKGxvYy5jYW5kaWRhdGVzKQoKICAgIGlmIG5vdCBhbGxfY2FuZGlkYXRlczoKICAgICAgICByZXR1cm4gTm9uZQoKICAgIGF4aXMgPSBidWlsZF9kaXJlY3Rpb25fYXhpcyhmcm9udGxpbmUsIGRpcmVjdGlvbl9jaXR5KQogICAgYW5ub3RhdGVfZGlyZWN0aW9uX2F4aXNfZm9yX2NhbmRpZGF0ZXMoYXhpcywgYWxsX2NhbmRpZGF0ZXMsIGxhYmVsPWxhYmVsKQogICAgcmV0dXJuIGF4aXMKAAAAAAAAAADWDwAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAAOQAAAAAAAAA5AAAAAAAAAAAAAAAAAPC/"
-				]
-			]
-		},
-		{
-			"file": "src/sitrepc2/reference/locale_lookup.csv",
-			"settings":
-			{
-				"buffer_size": 1276285,
-				"encoding": "UTF-8",
-				"line_ending": "Windows"
-			},
-			"undo_stack":
-			[
-			]
-		}
 	],
 	"build_system": "",
 	"build_system_choices":
@@ -587,34 +555,46 @@
 		"/Volumes/bladerunner/Projects/sitrepc2",
 		"/Volumes/bladerunner/Projects/sitrepc2/data",
 		"/Volumes/bladerunner/Projects/sitrepc2/data/spatial",
-		"/Volumes/bladerunner/Projects/sitrepc2/scripts",
 		"/Volumes/bladerunner/Projects/sitrepc2/src",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2",
-		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/enrichment",
+		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/events",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/gazetteer",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/reference",
-		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/spatial"
+		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/util"
 	],
 	"file_history":
 	[
+		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/reference/exonyms.py",
+		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/reference/direction_lookup.csv",
+		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/dom/resolution.py",
+		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/events/pipeline.py",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/reference/locale_lookup.csv",
 		"/Volumes/bladerunner/Projects/sitrepc2/data/spatial/ua_settlements.csv",
+		"/Volumes/bladerunner/Projects/warreport_ua_settlement_aliases/cid_encoding.py",
+		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/spatial/direction_axis.py",
+		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/gazetteer/typedefs.py",
+		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/gazetteer/index.py",
+		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/gazetteer/aliases.py",
+		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/gazetteer/io.py",
+		"/Volumes/bladerunner/Projects/sitrepc2/scripts/update_direction_aliases.py",
+		"/Volumes/bladerunner/Projects/sitrepc2/scripts/add_aliases.py",
+		"/Volumes/bladerunner/Projects/sitrepc2/scripts/normalize_aliases.py",
+		"/Volumes/bladerunner/Projects/warreport_ua_settlement_aliases/warreport_ua_settlement_aliases.csv",
+		"/Volumes/bladerunner/Projects/sitrepc2/data/spatial/ua_settlements.geojson",
+		"/Volumes/bladerunner/Projects/sitrepc2/README.md",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/reference/group_lookup.csv",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/nlp/pipeline.py",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/review/pd_summary.py",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/nlp/bootstrap.py",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/events/context/group.py",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/events/typedefs.py",
-		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/gazetteer/index.py",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/reference/region_lookup.csv",
 		"/Volumes/bladerunner/Projects/sitrepc2/scripts/add_id.py",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/review/pd_reader.py",
-		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/gazetteer/typedefs.py",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/review/pd_nodes.py",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/review/pd_writer.py",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/events/context/candidate_narrowing.py",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/events/context/direction.py",
-		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/events/pipeline.py",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/events/resolution.py",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/nlp/sectioning.py",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/nlp/lss_scoping.py",
@@ -649,13 +629,11 @@
 		"/Users/bladerunner/Projects/telex/telex.py",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/events/event_locations.py",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/spatial/clustering.py",
-		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/spatial/direction_axis.py",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/spatial/distance.py",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/util/serialization.py",
 		"/Volumes/bladerunner/Projects/sitrepc2/add_id.py",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/reference/locale_lookup.csv.bak",
 		"/Volumes/bladerunner/Projects/sitrepc2/.gitignore",
-		"/Volumes/bladerunner/Projects/sitrepc2/README.md",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/holmes/holmes.bak/events.py",
 		"/Volumes/bladerunner/Projects/sitrepc2/src/sitrepc2/locations/event_locations.py",
 		"/Users/bladerunner/Projects/mod-mymap/src/modmymap/nlp/context.py",
@@ -713,18 +691,7 @@
 		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/context.py",
 		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/ingest/telegram.py",
 		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/util/proximity.py",
-		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/confidence.py",
-		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/review_markdown.py",
-		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/frontline/frontline.py",
-		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/__init__.py",
-		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/util/progress_bar.py",
-		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/geo/fetch_divgen_kml.py",
-		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/ingest/pretranslate_filter.py",
-		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/ingest/telegram.py.bak",
-		"/Users/garyboyd/Projects/mod-mymap/data/telegram/channels.jsonl",
-		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/geo/units_projectowlosint.py",
-		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/events.py",
-		"/Users/garyboyd/Projects/mod-mymap/data/interim/2025/2025-11/2025-11-20/review/location_review_2025-11-20.md"
+		"/Users/garyboyd/Projects/mod-mymap/src/modmymap/nlp/confidence.py"
 	],
 	"find":
 	{
@@ -743,6 +710,15 @@
 		"case_sensitive": false,
 		"find_history":
 		[
+			"search",
+			"decode",
+			"Chervona Sloboda",
+			"Sloboda",
+			"Q33345",
+			"27212295",
+			"Q33345",
+			"Severodonetsk",
+			"Q33349",
 			"orikhiv",
 			"orikhov",
 			"590847913708267500",
@@ -861,16 +837,7 @@
 			"encode",
 			"Q760235",
 			"synkivsk",
-			"novo pokrovka",
-			"orekhov",
-			"chasiv yar",
-			"ReviewNode",
-			"register_war_search_phrases",
-			"add_ga",
-			"build_word_matches",
-			"war_events",
-			"WarEvent",
-			"LSSLocation"
+			"novo pokrovka"
 		],
 		"highlight": true,
 		"in_selection": false,
@@ -905,67 +872,6 @@
 		{
 			"sheets":
 			[
-				{
-					"buffer": 0,
-					"file": "src/sitrepc2/spatial/direction_axis.py",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 4054,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								57,
-								57
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/Python/Python.sublime-syntax",
-							"tab_size": 4,
-							"translate_tabs_to_spaces": true
-						},
-						"translation.x": 0.0,
-						"translation.y": 0.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 1,
-					"stack_multiselect": false,
-					"type": "text"
-				},
-				{
-					"buffer": 1,
-					"file": "src/sitrepc2/reference/locale_lookup.csv",
-					"selected": true,
-					"semi_transient": true,
-					"settings":
-					{
-						"buffer_size": 1276285,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								3240,
-								3247
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/Text/Plain text.tmLanguage"
-						},
-						"translation.x": 0.0,
-						"translation.y": 638.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 0,
-					"stack_multiselect": false,
-					"type": "text"
-				}
 			]
 		}
 	],
@@ -1011,7 +917,7 @@
 	"project": "sitrepc2.sublime-project",
 	"replace":
 	{
-		"height": 72.0
+		"height": 52.0
 	},
 	"save_all_on_build": true,
 	"select_file":
@@ -1053,7 +959,7 @@
 	"show_open_files": true,
 	"show_tabs": true,
 	"side_bar_visible": true,
-	"side_bar_width": 236.0,
+	"side_bar_width": 211.0,
 	"status_bar_visible": true,
 	"template_settings":
 	{

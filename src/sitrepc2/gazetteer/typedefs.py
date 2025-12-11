@@ -63,7 +63,6 @@ class GroupEntry:
 @dataclass(frozen=True)
 class DirectionEntry:
     name: str
-    aliases: List[str] # eg, Kupiansk, Kupyansk ...
-    anchor: int # location cid of the anchoring location
-
+    anchor: LocaleEntry # LocaleEntry of the anchor
+    aliases: List[str]
 
