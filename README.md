@@ -1,58 +1,138 @@
 # sitrepc2 — Project Overview
 
-**sitrepc2** is an automated OSINT processing engine designed to extract structured, geolocated military activity from unstructured text sources—primarily Telegram war‑reporting posts. It ingests raw narrative descriptions of battlefield events and transforms them into normalized, mappable data suitable for tactical and operational-level situational reporting.
+**sitrepc2** is an automated OSINT processing engine that transforms raw, narrative battlefield reporting into structured, geolocated, operationally meaningful data. It is built for high-precision extraction of military activity from Telegram posts, news updates, and similar unstructured sources.
 
-## Requirements:
-Holmes requires both that and the large vector-based model. So, if you want to use spaCys transforms, you'll have both in memory. Our additions to spaCy's entity rulers and the war lexicon are minimal, and should have a minimal impact on resource requirements.
-
-Recommended Minimums:
-- **8 GB RAM**: Vector based spaCy model: **en_core_web_lg**
-- **16 GB RAM**: Transform based spaCy model: **en_core_web_lg** and **en_core_web_trf**
+The system ingests natural-language text, detects relevant events, resolves locations, interprets military actors and actions, and outputs clean, mappable intelligence suitable for situational reporting, dashboards, or geospatial tools.
 
 ---
 
-## 1. High-precision Gazetteer + Geospatial Intelligence Layer
-- Curated multi-thousand-entry gazetteer of Ukrainian localities, regions, aliases, and operational groups.
-- Fast and accurate lookup with multilingual alias resolution.
-- Computes geospatial metrics such as frontline distance, clustering, and spatial context.
+## Requirements
+
+Holmes-Extractor requires both a spaCy pipeline and a large vector model. If you enable transformer support, spaCy will load both the vector and transformer models concurrently.
+
+**Recommended Minimums:**
+
+- **8 GB RAM**  
+  - spaCy vector model: `en_core_web_lg`
+
+- **16 GB RAM**  
+  - `en_core_web_lg` + `en_core_web_trf`  
+  - Required for best Coreference + Holmes performance
+
+sitrepc2 adds lightweight entity-ruler rules and a domain lexicon. These additions have minimal overhead relative to the core NLP pipeline.
 
 ---
 
-## 2. NLP + Holmes Event Extraction Layer (LSS Layer)
-- Uses spaCy, Holmes-Extractor, and Coreference resolution to detect:
-  - actors (units, formations, forces)
-  - actions (attacks, movements, captures, strikes)
-  - assets (armor, artillery, UAVs, missiles, etc.)
-  - geospatial references (villages, cities, operational sectors)
-- Produces structured **EventMatch** objects that unify lexical, syntactic, and semantic information.
+# 1. High-Precision Gazetteer & Geospatial Intelligence Layer
+
+The gazetteer is backed by a **SQLite database** (`sitrepc2_seed.db`) initialized via `schema.sql` and accessed through `src/sitrepc2/db/`.  
+It replaces all prior CSV lookups.
+
+### Gazetteer Features
+- Complete database of:
+  - settlements  
+  - admin regions  
+  - aliases & exonyms  
+  - operational groups  
+  - directional clusters
+- Deterministic ID-based lookup using canonical keys (CID, region OSM IDs, group IDs).
+- Fast multilingual alias resolution.
+- Integrated geospatial utilities:
+  - frontline distance calculations
+  - directional axes
+  - clustering and spatial grouping
+  - polygonal region intelligence (admin4 boundaries)
+
+The gazetteer provides **high-confidence localization** for ambiguous battlefield references.
 
 ---
 
-## 3. Domain Interpretation Layer (DOM Layer)
-- Converts NLP matches into domain-meaningful **Events** with:
-  - disambiguated locations
-  - final coordinates
-  - event classification
-  - actors, assets, and directionality
-- Ensures outputs are operationally coherent and geospatially valid.
+# 2. NLP + Holmes Event Extraction (LSS Layer)
+
+Located under `src/sitrepc2/lss/`, this layer unifies:
+
+- **Lexical** signals (domain lexicon, keyphrases)
+- **Syntactic** structures (dependency analysis)
+- **Semantic** pattern matching (Holmes rules)
+- **Coreference resolution** for pronouns, anaphora, and repeated actors
+
+The layer identifies:
+
+- **Actors** (military units, formations, force groupings)
+- **Actions** (attacks, advances, captures, strikes, shelling, repulsed attacks)
+- **Assets** (armor, artillery, drones, missiles)
+- **Locations or directional references**
+
+It produces structured `EventMatch` records which serve as the intermediate semantic representation.
 
 ---
 
-## Purpose
-Transform messy, ambiguous, natural-language battlefield reporting into **clean, structured, geospatially actionable intelligence**.
+# 3. Domain Interpretation Layer (DOM Layer)
+
+Located under `src/sitrepc2/dom/`, this layer converts event matches into final, operationally meaningful **Events**.
+
+### Responsibilities
+- Location disambiguation using the database, aliasing, and spatial context
+- Computing final coordinate assignments
+- Actor & asset normalization
+- Event classification into operationally relevant categories
+- Ensuring geospatial and semantic coherence:
+  - resolving anchors and directional context
+  - ensuring references match real places and valid military structures
+
+This converts raw linguistic detections into **interpreted, geolocated, structured intelligence objects**.
 
 ---
 
-## Outputs
-- Geolocated events with type, actors, assets, direction, and confidence.
-- Frontline-relative spatial analysis.
-- Map-ready coordinate sets.
-- Structured data suitable for dashboards, visualization, or mapping tools.
+# Purpose
+
+To transform messy, ambiguous narrative battlefield reporting into:
+
+**clean, structured, geospatially actionable intelligence.**
+
+This enables:
+- tactical and operational analysis
+- situational awareness dashboards
+- map overlays and time-series conflict visualizations
 
 ---
 
-## Design Principles
-- Strong separation between NLP, semantics, and domain reasoning.
-- Deterministic, reproducible extraction pipeline.
-- Fully auditable transformations from raw text → structured event.
-- Human-curated gazetteer ensures accuracy in ambiguous regions.
+# Outputs
+
+sitrepc2 produces:
+
+- **Geolocated event objects** with:
+  - event type
+  - actors, assets
+  - directionality and contextualization
+  - confidence scoring
+
+- **Frontline-relative spatial metrics**
+- **Structured JSONL event streams**
+- **Map-ready coordinates** suitable for GIS and analytical tools
+
+---
+
+# Design Principles
+
+- **Strict separation of concerns**  
+  - Gazetteer layer  
+  - LSS (linguistic-semantic) extraction layer  
+  - DOM (domain interpretation) layer  
+
+- **Deterministic, auditable pipeline**  
+  Every stage from text ingestion → event extraction → geolocation is explicit and inspectable.
+
+- **High precision over high recall**  
+  Ambiguous references must be provably disambiguated or excluded.
+
+- **Database-driven canonicalization**  
+  All reference data is unified in the SQLite schema, enabling reproducibility and efficient updates.
+
+---
+
+# Summary
+
+sitrepc2 provides an end-to-end engine for converting battlefield text reports into structured, geospatially valid military activity datasets.  
+It is built for analysts who need transparent, reproducible, high-precision event extraction and mapping.
+
