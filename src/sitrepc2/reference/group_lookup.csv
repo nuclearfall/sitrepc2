@@ -1,7 +1,0 @@
-name,group_id,aliases,region_ids,neighbor_ids
-vostok group of forces,1,"vostok group of forces;vostok grouping of forces;vostok group;east group of forces;east grouping of forces","101746;71973;71980","6;2"
-dnepr group of forces,2,"dnepr group of forces;dnepr grouping of forces;dnepr group;dnipro group of forces;dnipro grouping of forces;dnipro group","71022;71980","1"
-sever group of forces,3,"sever group of forces;sever grouping of forces;sever group;north group of forces;north grouping of forces","71254;71250","4"
-zapad group of forces,4,"zapad group of forces;zapad grouping of forces;zapad group;west group of forces;west grouping of forces","71973;71254;71971","3;5"
-tsentr group of forces,5,"tsentr group of forces;tsentr grouping of forces;tsentr group;center group of forces;center grouping of forces;centre group of forces;centre grouping of forces","101746;71973","4;6"
-yug group of forces,6,"yug group of forces;yug grouping of forces;yug group;south group of forces;south grouping of forces","71973","5;1"
