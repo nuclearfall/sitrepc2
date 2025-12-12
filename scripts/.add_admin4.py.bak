@@ -26,11 +26,11 @@ from shapely.prepared import prep
 DATA_DIR = Path("data/spatial")
 REF_DIR = Path("src/sitrepc2/reference")
 
-GEOJSON_FILE = DATA_DIR / "ua_admin4.geojson"
+GEOJSON_FILE = DATA_DIR / "regions.geojson"
 SETTLEMENTS_FILE = DATA_DIR / "ua_settlements.csv"
 
-OUTPUT_SETTLEMENTS = REF_DIR / "settlements.csv"
-OUTPUT_REGIONS = REF_DIR / "regions.csv"
+OUTPUT_SETTLEMENTS = REF_DIR / "settlements.enriched.csv"
+OUTPUT_REGIONS = REF_DIR / "regions.enriched.csv"
 
 
 # -------------------------------------------------------
@@ -57,6 +57,7 @@ def load_regions(geojson_path: Path):
         region_osm_id = props.get("id")
         region_name_uk = props.get("name")
         region_name_en = props.get("name:en")
+        region_name_ru = props.get("name:ru", None)
         region_iso = props.get("ISO3166-2")
         region_wikidata = props.get("wikidata")
 
@@ -67,20 +68,23 @@ def load_regions(geojson_path: Path):
             "region:osm_id": region_osm_id,
             "region:name": region_name_en,
             "region:name:uk": region_name_uk,
+
             "region:wikidata": region_wikidata,
             "region:iso": region_iso,
         })
-
+        if region_name_ru:
+            regions_meta["region:name:ru"] = region_name_ru
         region_shapes.append({
             "polygon": shp,
             "prepared": prepared,
             "osm_id": region_osm_id,
-            "name": region_name_en,
+            "name_en": region_name_en,
             "name_uk": region_name_uk,
             "wikidata": region_wikidata,
             "iso": region_iso,
         })
-
+        if region_name_ru:
+            regions_meta["name:ru"] = region_name_ru
     return regions_meta, region_shapes
 
 
@@ -118,12 +122,15 @@ def enrich_settlements(settlements_path: Path,
             "lon": lon,
             "wikidata": row.get("wikidata"),
             "region:osm_id": assigned["osm_id"] if assigned else None,
-            "region:name": assigned["name"] if assigned else None,
+            "region:name": assigned["name:en"] if assigned else None,
+            "region:name:uk": assigned["name"] if assigned else None,
             # True if we successfully assigned a region via polygons,
             # False if no matching oblast was found.
-            "region:confirmed": bool(assigned),
+            #"region:confirmed": bool(assigned),
         })
-
+            name_ru = assigned.get("name:ru", None)
+            if name_ru:
+                results["region:name:ru"] = name_ru
     return pd.DataFrame(results)
 
 
