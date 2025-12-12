@@ -4,13 +4,15 @@ from __future__ import annotations
 from importlib.resources import files
 from pathlib import Path
 from typing import Optional, Tuple
+from importlib.resources import files
+
 
 # ---------------------------------------------------------------------------
 # 1. Detect project root (git-style)
 # ---------------------------------------------------------------------------
 
 DOTDIR_NAME = ".sitrepc2"
-
+SEED_DB_NAME = "sitrepc2_seed.db"
 
 def find_repo_root(start: Optional[Path] = None) -> Path:
     """
@@ -53,6 +55,8 @@ def current_db_path() -> Path:
     """Convenience wrapper: SQLite database for the current project."""
     return db_path(find_repo_root())
 
+def seed_db_path() -> Path:
+    return Path(files("sitrepc2") / "reference" / SEED_DB_NAME)
 
 # ---------------------------------------------------------------------------
 # 3. Workspace paths still relevant (lexicon, tg sources)
