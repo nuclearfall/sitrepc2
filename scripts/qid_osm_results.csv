@@ -1,7 +1,0 @@
-osm_type,osm_id,place,name,name:uk,wikidata,lat,lon
-way,128323420,neighbourhood,Ol'khovka,Ольховка,Q4334273,44.9503749,34.6209647
-node,337504567,isolated_dwelling,Orliv Yar,Орлів Яр,Q4336734,51.8400190,34.0799290
-node,26864138,,Attavyros,Αττάβυρος,Q757912,36.2099708,27.8644427
-node,337683905,town,Vesele,Веселе,Q2064567,47.0179164,34.9211323
-node,337674876,village,Stepove,Степове,Q4442207,47.5398948,35.4636028
-way,268567034,village,Stepove,Степове,Q4442207,47.5425917,35.4795499

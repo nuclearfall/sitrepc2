@@ -272,10 +272,9 @@ async def _iter_messages_in_range(
     We iterate backwards from (end_dt + 1 second) until we drop below start_dt.
     """
     offset_dt = end_dt + timedelta(seconds=1)
-    print(f"start date: {start_dt}")
     messages = client.iter_messages(entity, offset_date=offset_dt)
     if not messages:
-        print("No messages located at all.")
+        print("No messages found. Please check your source entry.")
     async for msg in messages:
         if msg.date is None:
             continue
@@ -526,7 +525,6 @@ async def _ingest_telegram_window_async(
                         end_dt=end_dt,
                     ):
                         text_orig = _extract_message_text(msg)
-                        print(msg)
                         if not text_orig:
                             continue
 
