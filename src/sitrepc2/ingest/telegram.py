@@ -1,4 +1,4 @@
-# src/modmymap/ingest/telegram_window.py
+# src/sitrepc2/ingest/telegram.py
 from __future__ import annotations
 
 import argparse
@@ -9,29 +9,31 @@ import os
 import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
-from typing import Final
+from typing import Final, Any
 
 from dotenv import load_dotenv
 from telethon import TelegramClient
 from telethon.errors import FloodWaitError, RPCError
 from telethon.tl import functions, types
 
+from datetime import timezone, date, datetime, time, timedelta
+UTC = timezone.utc
+
 logger = logging.getLogger(__name__)
 load_dotenv()
-
-api_id = os.getenv("API_ID")
-api_hash = os.getenv("API_HASH")
 
 # How aggressively we translate
 MIN_TRANSLATION_LENGTH = 40  # characters; tune as desired
 TRANSLATE_SLEEP_SECONDS = 5.0  # polite delay between TranslateTextRequest calls
 MAX_TRANSLATION_RETRIES = 5
 
+BASE_RETRY_SLEEP_SECONDS = 5.0  # adjust if needed
+
 # ---------------------------------------------------------------------------
 # Channel config
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ChannelConfig:
@@ -41,29 +43,17 @@ class ChannelConfig:
     active: bool
 
     @classmethod
-    def from_json(cls, data: dict) -> ChannelConfig:
+    def from_json(cls, data: dict[str, Any]) -> ChannelConfig:
         return cls(
-            channel_name=data["channel_name"],
-            alias=data.get("alias", data["channel_name"]),
-            channel_lang=data.get("channel_lang", "en"),
+            channel_name=str(data["channel_name"]),
+            alias=str(data.get("alias", data["channel_name"])),
+            channel_lang=str(data.get("channel_lang", "en")),
             active=bool(data.get("active", False)),
         )
 
 
-HARDCODED_CHANNELS: list[ChannelConfig] = [
-    ChannelConfig(
-        channel_name="mod_russia_en",
-        alias="Russia",
-        channel_lang="en",
-        active=False,
-    ),
-    ChannelConfig(
-        channel_name="GeneralStaffZSU",
-        alias="Ukraine",
-        channel_lang="uk",
-        active=False,
-    ),
-]
+# No more hardcoded channels; this remains as a fallback if you ever want it.
+HARDCODED_CHANNELS: list[ChannelConfig] = []
 
 # Phrases to keep posts for. Edit/extend as needed.
 PHRASE_FILTERS: list[str] = [
@@ -72,8 +62,6 @@ PHRASE_FILTERS: list[str] = [
     "Оперативна інформація станом на",
     "Coordinates:",
 ]
-
-BASE_RETRY_SLEEP_SECONDS = 5.0  # adjust if needed
 
 FRONTLINE_KEYWORDS: Final = ()
 
@@ -105,35 +93,19 @@ RECRUITMENT_PHRASES: Final = (
 TOPONYM_LIKE_RE = re.compile(r"\b[А-ЯІЇЄҐ][а-яіїєґ']+(?:,|\b)")
 
 
-class ProgressBar:
-    def __init__(self, total: int, width: int = 30):
-        self.total = max(total, 1)
-        self.width = width
-        self.count = 0
+class TranslationFailed(RuntimeError):
+    pass
 
-    def advance(self) -> None:
-        self.count += 1
-        filled = int(self.width * (self.count / self.total))
-        bar = "█" * filled + "░" * (self.width - filled)
-        print(f"\r[ {bar} ] {self.count}/{self.total}", end="", flush=True)
 
-    def finish(self) -> None:
-        print()  # move to next line
+# ---------------------------------------------------------------------------
+# Helpers / filters
+# ---------------------------------------------------------------------------
 
 
 def should_translate_uk_post(text: str) -> bool:
     blacklist = RECRUITMENT_PHRASES + TRAINING_PHRASES + TRAINING_HASHTAGS
     lowered = text.lower()
     return not any(word.lower() in lowered for word in blacklist)
-
-
-class TranslationFailed(RuntimeError):
-    pass
-
-
-# ---------------------------------------------------------------------------
-# Filters & helpers
-# ---------------------------------------------------------------------------
 
 
 def _matches_phrase_filter(text: str) -> bool:
@@ -146,6 +118,33 @@ def _matches_phrase_filter(text: str) -> bool:
     return any(phrase.lower() in lowered for phrase in PHRASE_FILTERS)
 
 
+def _passes_word_filters(
+    text: str,
+    blacklist: list[str] | tuple[str, ...] | None,
+    whitelist: list[str] | tuple[str, ...] | None,
+) -> bool:
+    """
+    Return True iff text is allowed under blacklist/whitelist rules.
+
+    - blacklist: if any word is present (case-insensitive), reject.
+    - whitelist: if provided, require at least one word be present.
+    """
+    lowered = text.lower()
+
+    if blacklist:
+        for word in blacklist:
+            if word.lower() in lowered:
+                return False
+
+    if whitelist:
+        for word in whitelist:
+            if word.lower() in lowered:
+                return True
+        return False
+
+    return True
+
+
 def _load_telegram_credentials() -> tuple[int, str, str]:
     """
     Load Telegram API credentials from environment variables.
@@ -155,7 +154,7 @@ def _load_telegram_credentials() -> tuple[int, str, str]:
       - API_HASH    (str)
 
     Optional:
-      - TELEGRAM_SESSION_NAME (str, defaults to "modmymap")
+      - TELEGRAM_SESSION_NAME (str, defaults to "sitrepc2")
     """
     api_id_raw = os.getenv("API_ID")
     api_hash = os.getenv("API_HASH")
@@ -164,7 +163,7 @@ def _load_telegram_credentials() -> tuple[int, str, str]:
         raise RuntimeError("API_ID and API_HASH must be set in the environment")
 
     api_id = int(api_id_raw)
-    session_name = os.getenv("TELEGRAM_SESSION_NAME", "modmymap")
+    session_name = os.getenv("TELEGRAM_SESSION_NAME", "sitrepc2")
     return api_id, api_hash, session_name
 
 
@@ -236,7 +235,13 @@ def _ensure_output_path(out_path: Path | None) -> Path:
 
 
 def _load_channels_from_file(path: Path) -> list[ChannelConfig]:
+    """
+    Load all channels from a JSONL file; do not filter on 'active' here.
+    """
     channels: list[ChannelConfig] = []
+    if not path.exists():
+        return channels
+
     with path.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -244,9 +249,15 @@ def _load_channels_from_file(path: Path) -> list[ChannelConfig]:
                 continue
             data = json.loads(line)
             cfg = ChannelConfig.from_json(data)
-            if cfg.active:
-                channels.append(cfg)
+            channels.append(cfg)
     return channels
+
+
+def _normalize_handle(s: str) -> str:
+    """
+    Normalize a handle/alias for comparison: strip '@', trim, lowercase.
+    """
+    return s.lstrip("@").strip().lower()
 
 
 async def _iter_messages_in_range(
@@ -261,8 +272,11 @@ async def _iter_messages_in_range(
     We iterate backwards from (end_dt + 1 second) until we drop below start_dt.
     """
     offset_dt = end_dt + timedelta(seconds=1)
-
-    async for msg in client.iter_messages(entity, offset_date=offset_dt):
+    print(f"start date: {start_dt}")
+    messages = client.iter_messages(entity, offset_date=offset_dt)
+    if not messages:
+        print("No messages located at all.")
+    async for msg in messages:
         if msg.date is None:
             continue
 
@@ -387,6 +401,22 @@ def _extract_message_text(msg: types.Message) -> str:
     return text.strip()
 
 
+class ProgressBar:
+    def __init__(self, total: int, width: int = 30):
+        self.total = max(total, 1)
+        self.width = width
+        self.count = 0
+
+    def advance(self) -> None:
+        self.count += 1
+        filled = int(self.width * (self.count / self.total))
+        bar = "█" * filled + "░" * (self.width - filled)
+        print(f"\r[ {bar} ] {self.count}/{self.total}", end="", flush=True)
+
+    def finish(self) -> None:
+        print()  # move to next line
+
+
 # ---------------------------------------------------------------------------
 # Core async implementation
 # ---------------------------------------------------------------------------
@@ -397,32 +427,59 @@ async def _ingest_telegram_window_async(
     end_date: str | None,
     out_path: Path | None = None,
     channels_path: Path | None = None,
+    aliases: list[str] | None = None,
+    blacklist: list[str] | None = None,
+    whitelist: list[str] | None = None,
 ) -> tuple[Path, list[dict]]:
     """
     Core async implementation.
 
-    Now:
-      - Pre-filters messages by PHRASE_FILTERS on the *raw* text.
-      - For non-English channels, only those pre-filtered messages are
-        considered for translation and counted in the progress bar.
+    Parameters:
+      - start_date, end_date: YYYY-MM-DD strings (end inclusive).
+      - out_path: optional posts.jsonl path; defaults to data/interim/...
+      - channels_path: path to tg_channels.jsonl; if None, falls back to HARDCODED_CHANNELS.
+      - aliases: if provided, restrict to channels whose alias or channel_name matches
+                 any of these (case-insensitive, '@' ignored); otherwise all active channels.
+      - blacklist: reject posts containing any of these words (case-insensitive).
+      - whitelist: if provided, keep only posts containing at least one of these words.
     """
     api_id, api_hash, session_name = _load_telegram_credentials()
     start_dt, end_dt = _parse_date_range(start_date, end_date)
 
     # Determine channels: file overrides hard-coded list if given
     if channels_path is not None:
-        channels = _load_channels_from_file(channels_path)
-        if not channels:
+        all_channels = _load_channels_from_file(channels_path)
+        if not all_channels:
             logger.warning(
-                "No active channels found in %s; falling back to HARDCODED_CHANNELS",
+                "No channels found in %s; falling back to HARDCODED_CHANNELS",
                 channels_path,
             )
-            channels = [cfg for cfg in HARDCODED_CHANNELS if cfg.active]
+            all_channels = HARDCODED_CHANNELS[:]
     else:
-        channels = [cfg for cfg in HARDCODED_CHANNELS if cfg.active]
+        all_channels = HARDCODED_CHANNELS[:]
+
+    alias_set = (
+        {_normalize_handle(a) for a in aliases}
+        if aliases is not None
+        else None
+    )
+
+    def _select(cfg: ChannelConfig) -> bool:
+        # Always honor 'active' flag
+        if not cfg.active:
+            return False
+        if alias_set is None:
+            return True
+        c_alias = _normalize_handle(cfg.alias)
+        c_name = _normalize_handle(cfg.channel_name)
+        return c_alias in alias_set or c_name in alias_set
+
+    channels = [cfg for cfg in all_channels if _select(cfg)]
 
     if not channels:
-        logger.info("No active channels in configuration.")
+        logger.info("No matching active channels in configuration.")
+        output_path = _ensure_output_path(out_path)
+        return output_path, []
 
     output_path = _ensure_output_path(out_path)
 
@@ -439,10 +496,11 @@ async def _ingest_telegram_window_async(
         with output_path.open("a", encoding="utf-8") as out_f:
             for cfg in channels:
                 logger.info(
-                    "Fetching from channel %s (alias=%s, lang=%s)",
+                    "Fetching from channel %s (alias=%s, lang=%s, active=%s)",
                     cfg.channel_name,
                     cfg.alias,
                     cfg.channel_lang,
+                    cfg.active,
                 )
 
                 try:
@@ -458,7 +516,7 @@ async def _ingest_telegram_window_async(
                 lang = cfg.channel_lang.lower()
 
                 # --------------------------------------------------
-                # ENGLISH CHANNELS — single pass, phrase filter only
+                # ENGLISH CHANNELS — single pass, phrase + word filters
                 # --------------------------------------------------
                 if lang == "en":
                     async for msg in _iter_messages_in_range(
@@ -468,16 +526,20 @@ async def _ingest_telegram_window_async(
                         end_dt=end_dt,
                     ):
                         text_orig = _extract_message_text(msg)
+                        print(msg)
                         if not text_orig:
                             continue
 
-                        # Pre-filter on raw text (Russian MoD phrase appears
-                        # directly in original text).
-                        if not _matches_phrase_filter(text_orig):
-                            continue
+                        # Pre-filter on raw text / header phrases
+                        # if not _matches_phrase_filter(text_orig):
+                        #     continue
 
                         text_en = text_orig
                         raw_text = None
+
+                        # Apply word filters on final text
+                        # if not _passes_word_filters(text_en, blacklist, whitelist):
+                        #     continue
 
                         record = {
                             "source": "telegram",
@@ -498,9 +560,9 @@ async def _ingest_telegram_window_async(
                     continue
 
                 # --------------------------------------------------
-                # NON-ENGLISH CHANNELS (e.g. GeneralStaffZSU, lang='uk')
-                # First pass: find which messages *both* match the
-                # phrase filter and are worth translating.
+                # NON-ENGLISH CHANNELS (e.g. lang='uk')
+                # First pass: find which messages match phrase filter
+                # and are worth translating.
                 # --------------------------------------------------
                 translate_candidates: set[int] = set()
 
@@ -514,17 +576,14 @@ async def _ingest_telegram_window_async(
                     if not text_orig:
                         continue
 
-                    # PRE-FILTER by PHRASE_FILTERS on RAW TEXT
-                    # (e.g. Ukrainian "Оперативна інформація станом на").
-                    if not _matches_phrase_filter(text_orig):
-                        continue
+                    # if not _matches_phrase_filter(text_orig):
+                    #     continue
 
                     if lang == "uk":
                         if not should_translate_uk_post(text_orig):
                             continue
                         translate_candidates.add(msg.id)
                     else:
-                        # Other non-EN languages, if you ever add them.
                         translate_candidates.add(msg.id)
 
                 total_to_translate = len(translate_candidates)
@@ -545,7 +604,6 @@ async def _ingest_telegram_window_async(
                     start_dt=start_dt,
                     end_dt=end_dt,
                 ):
-                    # Only touch messages we decided were interesting in pass 1.
                     if msg.id not in translate_candidates:
                         continue
 
@@ -571,13 +629,14 @@ async def _ingest_telegram_window_async(
                         progress.finish()
                         raise
 
-                    # You *can* re-check the phrase filter on text_en here,
-                    # but given the fixed formulaic headers, it's probably
-                    # redundant. Keeping the record unconditionally for
-                    # all candidates:
+                    # Apply word filters on translated text
+                    # if not _passes_word_filters(text_en, blacklist, whitelist):
+                    #     continue
+
                     record = {
                         "source": "telegram",
                         "channel": cfg.channel_name,
+                        "alias": cfg.alias,
                         "channel_lang": cfg.channel_lang,
                         "post_id": msg.id,
                         "published_at": _utc_iso(msg.date),
@@ -604,9 +663,18 @@ def fetch_posts(
     end_date: str | None = None,
     channels_path: Path | None = None,
     out_path: Path | None = None,
+    aliases: list[str] | None = None,
+    blacklist: list[str] | None = None,
+    whitelist: list[str] | None = None,
 ) -> tuple[Path, list[dict]]:
     """
     Synchronous wrapper around the async ingest function.
+
+    This is the main entry point used by the Typer CLI:
+
+        sitrepc2 fetch <source> --start ... [--end ...] [--blacklist ...] [--whitelist ...]
+
+    - aliases: list of alias/channel identifiers, or None for "all active".
     """
     return asyncio.run(
         _ingest_telegram_window_async(
@@ -614,16 +682,26 @@ def fetch_posts(
             end_date=end_date,
             out_path=out_path,
             channels_path=channels_path,
+            aliases=aliases,
+            blacklist=blacklist,
+            whitelist=whitelist,
         )
     )
 
 
 # ---------------------------------------------------------------------------
-# CLI entrypoint
+# Legacy CLI entrypoint (optional)
 # ---------------------------------------------------------------------------
 
 
 def main(argv: list[str] | None = None) -> int:
+    """
+    Legacy argparse entrypoint. You can still run:
+
+        python -m sitrepc2.ingest.telegram -s 2025-12-01 -e 2025-12-05 -i path/to/tg_channels.jsonl
+
+    This does not expose aliases/filters; for that, use the Typer CLI (`sitrepc2 fetch`).
+    """
     parser = argparse.ArgumentParser(
         description="Fetch and translate Telegram posts in a date window."
     )
@@ -670,6 +748,95 @@ def main(argv: list[str] | None = None) -> int:
         end_date=end_date,
         channels_path=channels_path,
         out_path=out_path,
+        aliases=None,
+        blacklist=None,
+        whitelist=None,
+    )
+
+    print(f"Wrote {len(records)} records to {output_path}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Legacy / Standalone CLI Entry Point (FULL VERSION)
+# ---------------------------------------------------------------------------
+
+def main(argv: list[str] | None = None) -> int:
+    """
+    Fully functional standalone CLI for debugging Telegram ingestion.
+
+    Example:
+
+        python -m sitrepc2.ingest.telegram \
+            --start 2025-12-03 \
+            --end 2025-12-05 \
+            --channels data/tg_channels.jsonl \
+            --alias rybar \
+            --blacklist foo bar \
+            --whitelist attack \
+            --out posts.jsonl
+    """
+    parser = argparse.ArgumentParser(
+        description="Fetch and translate Telegram posts in a date window.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+
+    parser.add_argument(
+        "-s", "--start", required=True,
+        help="Start date (YYYY-MM-DD, inclusive)."
+    )
+    parser.add_argument(
+        "-e", "--end",
+        help="End date (YYYY-MM-DD, inclusive). Defaults to --start."
+    )
+
+    parser.add_argument(
+        "-c", "--channels",
+        dest="channels_path",
+        help="Path to tg_channels.jsonl (otherwise HARDCODED_CHANNELS is used)."
+    )
+
+    parser.add_argument(
+        "-a", "--alias",
+        dest="aliases",
+        action="append",
+        help="Alias or channel_name to fetch (can specify multiple). Use no --alias to fetch all active."
+    )
+
+    parser.add_argument(
+        "--blacklist",
+        nargs="*",
+        default=None,
+        help="Reject posts containing ANY of these words (case-insensitive)."
+    )
+
+    parser.add_argument(
+        "--whitelist",
+        nargs="*",
+        default=None,
+        help="Keep ONLY posts containing at least one of these words."
+    )
+
+    parser.add_argument(
+        "-o", "--out",
+        dest="out_path",
+        help="Explicit output file path (posts.jsonl). Defaults to data/interim/YYYY/... path."
+    )
+
+    args = parser.parse_args(argv)
+
+    # Normalize paths
+    channels_path = Path(args.channels_path) if args.channels_path else None
+    out_path = Path(args.out_path) if args.out_path else None
+
+    output_path, records = fetch_posts(
+        start_date=args.start,
+        end_date=args.end,
+        channels_path=channels_path,
+        out_path=out_path,
+        aliases=args.aliases,
+        blacklist=args.blacklist,
+        whitelist=args.whitelist,
     )
 
     print(f"Wrote {len(records)} records to {output_path}")
@@ -678,3 +845,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
