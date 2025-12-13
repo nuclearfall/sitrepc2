@@ -163,7 +163,8 @@ def info():
 
     finally:
         conn.close()
-        
+
+
 # ------------------------------------------------------------
 # LIST COMMANDS
 # ------------------------------------------------------------
@@ -179,14 +180,7 @@ def list_entities(
     ),
 ):
     """
-    List entries of a specific entity type:
-
-        sitrepc2 db list locales
-        sitrepc2 db list regions
-        sitrepc2 db list groups
-        sitrepc2 db list directions
-
-    Use --limit 0 to disable row limiting.
+    List entries of a specific entity type.
     """
     entity = entity.lower()
     conn = connect()
@@ -224,23 +218,26 @@ def list_entities(
 
 
 # ------------------------------------------------------------
-# FIND COMMANDS
+# FIND COMMAND
 # ------------------------------------------------------------
 
 @app.command("find")
-def find(entity: str, query: str):
+def find(
+    entity: str,
+    query: str,
+    fuzzy: bool = typer.Option(
+        False,
+        "--fuzzy",
+        help="Enable fuzzy (LIKE-based) matching after exact lookups fail.",
+    ),
+):
     """
-    Unified search selector:
-
-        sitrepc2 db find locale <query>
-        sitrepc2 db find region <query>
-        sitrepc2 db find group <query>
-        sitrepc2 db find direction <query>
+    Unified search selector.
     """
     entity = entity.lower()
 
     if entity == "locale":
-        return find_locale(query)
+        return find_locale(query, fuzzy=fuzzy)
     if entity == "region":
         return find_region(query)
     if entity == "group":
@@ -255,7 +252,7 @@ def find(entity: str, query: str):
 # LOCALE FINDER
 # ------------------------------------------------------------
 
-def find_locale(query: str):
+def find_locale(query: str, fuzzy: bool = False):
     """
     Search order:
 
@@ -263,12 +260,13 @@ def find_locale(query: str):
       2. If numeric: region_id or group_id
       3. wikidata
       4. exact name
-      5. alias (via aliases table, entity_type='locale')
+      5. exact alias
+      6. (optional) fuzzy name / alias
     """
     conn = connect()
     norm = normalize(query)
 
-    # 1. cid (primary key)
+    # 1. cid
     rows = conn.execute(
         "SELECT * FROM locales WHERE cid = ?", (query,)
     ).fetchall()
@@ -276,7 +274,7 @@ def find_locale(query: str):
         pretty_table("Locales (cid)", rows)
         return
 
-    # 2. numeric → region_id or group_id
+    # 2. numeric → region_id / group_id
     if query.isdigit():
         n = int(query)
         rows = conn.execute(
@@ -306,7 +304,7 @@ def find_locale(query: str):
         pretty_table("Locales (name)", rows)
         return
 
-    # 5. alias lookup (only locales use aliases in current schema)
+    # 5. exact alias
     rows = conn.execute(
         """
         SELECT l.*
@@ -316,7 +314,45 @@ def find_locale(query: str):
         """,
         (norm,),
     ).fetchall()
-    pretty_table("Locales (aliases)", rows)
+    if rows:
+        pretty_table("Locales (aliases)", rows)
+        return
+
+    # 6. fuzzy fallback (opt-in)
+    if fuzzy:
+        like = f"%{norm}%"
+
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM locales
+            WHERE lower(name) LIKE ?
+            ORDER BY length(name) ASC
+            LIMIT 50
+            """,
+            (like,),
+        ).fetchall()
+        if rows:
+            pretty_table("Locales (fuzzy name)", rows)
+            return
+
+        rows = conn.execute(
+            """
+            SELECT l.*
+            FROM aliases a
+            JOIN locales l ON a.entity_id = l.cid
+            WHERE a.entity_type='locale'
+              AND a.normalized LIKE ?
+            ORDER BY length(a.normalized) ASC
+            LIMIT 50
+            """,
+            (like,),
+        ).fetchall()
+        if rows:
+            pretty_table("Locales (fuzzy alias)", rows)
+            return
+
+    print("[yellow]No locale matches found.[/yellow]")
 
 
 # ------------------------------------------------------------
@@ -324,16 +360,8 @@ def find_locale(query: str):
 # ------------------------------------------------------------
 
 def find_region(query: str):
-    """
-    Search order:
-
-      1. osm_id (numeric)
-      2. wikidata
-      3. exact name
-    """
     conn = connect()
 
-    # 1. osm_id (primary key)
     if query.isdigit():
         n = int(query)
         rows = conn.execute(
@@ -343,7 +371,6 @@ def find_region(query: str):
             pretty_table("Regions (osm_id)", rows)
             return
 
-    # 2. wikidata
     rows = conn.execute(
         "SELECT * FROM regions WHERE wikidata = ?", (query,)
     ).fetchall()
@@ -351,7 +378,6 @@ def find_region(query: str):
         pretty_table("Regions (wikidata)", rows)
         return
 
-    # 3. exact name
     rows = conn.execute(
         "SELECT * FROM regions WHERE name = ?", (query,)
     ).fetchall()
@@ -363,15 +389,8 @@ def find_region(query: str):
 # ------------------------------------------------------------
 
 def find_group(query: str):
-    """
-    Search order:
-
-      1. group_id (numeric)
-      2. exact name
-    """
     conn = connect()
 
-    # 1. group_id (primary key)
     if query.isdigit():
         gid = int(query)
         rows = conn.execute(
@@ -381,7 +400,6 @@ def find_group(query: str):
             pretty_table("Groups (group_id)", rows)
             return
 
-    # 2. exact name
     rows = conn.execute(
         "SELECT * FROM groups WHERE name = ?", (query,)
     ).fetchall()
@@ -393,15 +411,8 @@ def find_group(query: str):
 # ------------------------------------------------------------
 
 def find_direction(query: str):
-    """
-    Search order:
-
-      1. dir_id (numeric)
-      2. exact name
-    """
     conn = connect()
 
-    # 1. dir_id
     if query.isdigit():
         dir_id = int(query)
         rows = conn.execute(
@@ -411,7 +422,6 @@ def find_direction(query: str):
             pretty_table("Directions (dir_id)", rows)
             return
 
-    # 2. name
     rows = conn.execute(
         "SELECT * FROM directions WHERE name = ?", (query,)
     ).fetchall()
@@ -424,20 +434,9 @@ def find_direction(query: str):
 
 @app.command("show")
 def show(entity: str, identifier: str):
-    """
-    Show full record for an entity.
-
-    Examples:
-
-        sitrepc2 db show locale <cid>
-        sitrepc2 db show region <osm_id>
-        sitrepc2 db show group <group_id>
-        sitrepc2 db show direction <dir_id or name>
-    """
     entity = entity.lower()
     conn = connect()
 
-    # --- Direction: allow dir_id or name
     if entity == "direction":
         if identifier.isdigit():
             row = conn.execute(
@@ -467,7 +466,6 @@ def show(entity: str, identifier: str):
         pretty_table("Direction", [row])
         return
 
-    # --- Locale: show by cid only (primary key)
     if entity == "locale":
         row = conn.execute(
             "SELECT * FROM locales WHERE cid = ?", (identifier,)
@@ -491,7 +489,6 @@ def show(entity: str, identifier: str):
         pretty_table("Aliases", aliases)
         return
 
-    # --- Region: by osm_id
     if entity == "region":
         if not identifier.isdigit():
             print("[red]Region identifier must be an osm_id (integer)[/red]")
@@ -508,7 +505,6 @@ def show(entity: str, identifier: str):
         pretty_table("Region", [row])
         return
 
-    # --- Group: by group_id
     if entity == "group":
         if not identifier.isdigit():
             print("[red]Group identifier must be a group_id (integer)[/red]")
@@ -527,8 +523,9 @@ def show(entity: str, identifier: str):
 
     print("[red]Unknown entity for show command[/red]")
 
+
 # ------------------------------------------------------------
-# SQL COMMAND (new)
+# SQL COMMAND
 # ------------------------------------------------------------
 
 @app.command("sql")
@@ -549,24 +546,9 @@ def sql(
         help="Title for the result table when the query returns rows.",
     ),
 ):
-    """
-    Execute arbitrary SQL against the sitrepc2 database.
-
-    Examples:
-
-        # Simple SELECT
-        sitrepc2 db sql "SELECT cid, name FROM locales LIMIT 10"
-
-        # Show all table names
-        sitrepc2 db sql "SELECT name FROM sqlite_master WHERE type='table'"
-
-        # From a file
-        sitrepc2 db sql --file debug.sql
-    """
     if not query and not file:
         raise typer.BadParameter("You must provide a query or --file.")
 
-    # Load SQL text
     sql_text = ""
     if file is not None:
         try:
@@ -576,7 +558,6 @@ def sql(
             raise typer.Exit(code=1)
 
     if query:
-        # If both are provided, append the inline query after the file contents.
         sql_text = (sql_text + "\n" + query).strip()
     else:
         sql_text = sql_text.strip()
@@ -588,24 +569,18 @@ def sql(
     conn = connect()
     cur = conn.cursor()
 
-    # For now, we treat this as a single statement; multi-statement scripts should
-    # typically go in a file and be split/managed manually if you need results back.
     try:
         cur.execute(sql_text)
 
         if cur.description:
-            # Query returned rows (SELECT, PRAGMA, etc.)
             rows = cur.fetchall()
             if rows:
-                # Reuse existing pretty_table helper
                 pretty_table(title, rows)
             else:
                 print("[yellow]Query executed successfully but returned no rows.[/yellow]")
         else:
-            # Non-SELECT: commit and show rows affected
             conn.commit()
-            affected = cur.rowcount
-            print(f"[green]OK[/green] [dim]({affected} row(s) affected)[/dim]")
+            print(f"[green]OK[/green] [dim]({cur.rowcount} row(s) affected)[/dim]")
 
     except Exception as e:
         print(f"[red]SQL error:[/red] {e}")

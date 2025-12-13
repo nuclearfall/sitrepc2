@@ -688,74 +688,6 @@ def fetch_posts(
 
 
 # ---------------------------------------------------------------------------
-# Legacy CLI entrypoint (optional)
-# ---------------------------------------------------------------------------
-
-
-def main(argv: list[str] | None = None) -> int:
-    """
-    Legacy argparse entrypoint. You can still run:
-
-        python -m sitrepc2.ingest.telegram -s 2025-12-01 -e 2025-12-05 -i path/to/tg_channels.jsonl
-
-    This does not expose aliases/filters; for that, use the Typer CLI (`sitrepc2 fetch`).
-    """
-    parser = argparse.ArgumentParser(
-        description="Fetch and translate Telegram posts in a date window."
-    )
-    parser.add_argument(
-        "-s",
-        "--start",
-        required=True,
-        help="Start date (YYYY-MM-DD, inclusive).",
-    )
-    parser.add_argument(
-        "-e",
-        "--end",
-        help="End date (YYYY-MM-DD, inclusive). Defaults to start date if omitted.",
-    )
-    parser.add_argument(
-        "-i",
-        "--import",
-        dest="import_path",
-        help=(
-            "Optional path to channels JSONL file. "
-            "If provided, overrides the hard-coded channel list."
-        ),
-    )
-    parser.add_argument(
-        "-o",
-        "--out",
-        dest="out_path",
-        help=(
-            "Optional JSONL output path. "
-            "If omitted, uses data/interim/YYYY/YYYY-MM/YYYY-MM-DD/posts.jsonl."
-        ),
-    )
-
-    args = parser.parse_args(argv)
-
-    start_date = args.start
-    end_date = args.end
-
-    channels_path: Path | None = Path(args.import_path) if args.import_path else None
-    out_path: Path | None = Path(args.out_path) if args.out_path else None
-
-    output_path, records = fetch_posts(
-        start_date=start_date,
-        end_date=end_date,
-        channels_path=channels_path,
-        out_path=out_path,
-        aliases=None,
-        blacklist=None,
-        whitelist=None,
-    )
-
-    print(f"Wrote {len(records)} records to {output_path}")
-    return 0
-
-
-# ---------------------------------------------------------------------------
 # Legacy / Standalone CLI Entry Point (FULL VERSION)
 # ---------------------------------------------------------------------------
 
@@ -843,4 +775,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

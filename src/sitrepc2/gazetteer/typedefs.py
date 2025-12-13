@@ -13,9 +13,9 @@ from typing import Optional, List
 class LocaleEntry:
     """
     Canonical representation of a mappable place in the sitrepc2 gazetteer.
-    Derived directly from locale_lookup.csv (base) or patch CSVs.
+    Derived from the authoritative SQLite workspace database.
 
-    Fields (aligned with locale_lookup.csv):
+    Fields aligned with the canonical database schema:
       - cid: primary key (TEXT in DB), canonical string form of a 64-bit
              coordinate-based ID (encode_coord_u64).
       - name: primary display name
@@ -52,7 +52,8 @@ class LocaleEntry:
 @dataclass(frozen=True)
 class RegionEntry:
     """
-    Canonical region record, aligned with region_lookup.csv:
+    Canonical region record, aligned with the authoritative SQLite 
+    workspace database:
 
         osm_id,wikidata,iso3166_2,name,aliases,neighbors
 
@@ -72,7 +73,8 @@ class RegionEntry:
 @dataclass(frozen=True)
 class GroupEntry:
     """
-    Russian Group of Forces entity, aligned with group_lookup.csv:
+    Russian Group of Forces entity, aligned with the authoritative 
+    SQLite workspace database
 
         name,group_id,aliases,region_ids,neighbor_ids
 
@@ -93,7 +95,8 @@ class GroupEntry:
 @dataclass(frozen=True)
 class DirectionEntry:
     """
-    Direction entity, aligned with direction_lookup.csv + DB:
+    Direction entity, aligned with the authoritative SQLite workspace 
+    database:
 
         dir_id (PK, in DB only)
         name,anchor_cid

@@ -195,7 +195,6 @@ def load_groups_from_db() -> List[GroupEntry]:
 # ------------------------------
 # Direction Loader (from DB)
 # ------------------------------
-
 def load_directions_from_db(
     locale_by_cid: Optional[Dict[str, LocaleEntry]] = None,
 ) -> List[DirectionEntry]:
@@ -206,9 +205,7 @@ def load_directions_from_db(
 
         dir_id, name, anchor_cid
 
-    If `locale_by_cid` is provided, the `anchor` field of DirectionEntry
-    will be populated with the corresponding LocaleEntry; otherwise it
-    will remain None.
+    Direction aliases are inherited from the anchor locale.
     """
     conn = connect()
     try:
@@ -224,22 +221,29 @@ def load_directions_from_db(
         ).fetchall()
 
         out: List[DirectionEntry] = []
+
         for row in rows:
             anchor_cid = str(row["anchor_cid"])
             anchor: Optional[LocaleEntry] = None
+            aliases: List[str] = []
+
             if locale_by_cid is not None:
                 anchor = locale_by_cid.get(anchor_cid)
+                if anchor is not None:
+                    # Inherit aliases from the anchor locale
+                    aliases = list(anchor.aliases)
 
             data = {
                 "dir_id": int(row["dir_id"]) if row["dir_id"] is not None else None,
                 "name": row["name"],
                 "anchor_cid": anchor_cid,
                 "anchor": anchor,
-                # Directions currently have no alias column in the DB;
-                # keep the field for future extension.
-                "aliases": [],
+                "aliases": aliases,
             }
+
             out.append(deserialize(data, DirectionEntry))
+
         return out
     finally:
         conn.close()
+
