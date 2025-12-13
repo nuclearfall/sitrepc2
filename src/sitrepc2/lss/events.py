@@ -1,4 +1,4 @@
-# src/sitrepc2/holmes/events.py
+# src/sitrepc2/lss/events.py
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -65,18 +65,3 @@ def gather_aliases(
     )
 
 
-def gather_aliases_from_db() -> Tuple[List[str], List[str], List[str], List[str]]:
-    """
-    Convenience helper: load gazetteer data from the SQLite database and
-    return normalized alias/name sets for all four categories.
-
-    Returns:
-        (
-            locale_aliases,
-            region_aliases,
-            group_aliases,
-            direction_aliases
-        )
-    """
-    regions, groups, locales, directions = load_gazetteer_from_db()
-    return gather_aliases(locales, regions, groups, directions)
