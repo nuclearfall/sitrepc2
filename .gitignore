@@ -1,92 +1,39 @@
-# ----------------------------------------
+# -------------------------------------------------
 # Python
-# ----------------------------------------
+# -------------------------------------------------
 __pycache__/
 *.py[cod]
-*$py.class
-
-# Distribution / packaging
-build/
-dist/
+*.pyo
+*.pyd
 *.egg-info/
 .eggs/
-pip-wheel-metadata/
-wheels/
+dist/
+build/
 
 # Virtual environments
-.env
 .venv/
 venv/
-env/
-ENV/
+.env/
 
-# PyInstaller
-*.manifest
-*.spec
+# -------------------------------------------------
+# SQLite / data artifacts
+# -------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
 
-# Unit test / coverage
-.coverage
-coverage.xml
-htmlcov/
-.cache/
-
-# Jupyter / notebooks
-.ipynb_checkpoints/
-
-# MyPy / Pyright
-.mypy_cache/
-.dmypy.json
-.pyre/
-.pytype/
-
-# Ruff / black / linting
-.ruff_cache/
-.black/
-
-# ----------------------------------------
-# Project-specific: sitrepc2
-# ----------------------------------------
-# Local data cache; never commit user workspace reproductions
-.sitrepc2/
-
-# Local logs, temp output, scratch dirs
-logs/
-tmp/
-temp/
-scratch/
-
-# Local test files and playgrounds
-local_test/
-local_dev/
-
-# ----------------------------------------
-# CLI artifacts
-# ----------------------------------------
-*.log
-*.tmp
-
-# ----------------------------------------
-# OS / Editor Artifacts
-# ----------------------------------------
-
-# macOS
+# -------------------------------------------------
+# Editor / OS junk
+# -------------------------------------------------
 .DS_Store
-.AppleDouble
-.LSOverride
+Thumbs.db
 
-# Thumbnail cache files
-._*
-
-# Files that might appear on external disks
-.Spotlight-V100
-.Trashes
-
-# VSCode
-.vscode/
-
-# Sublime Text (explicit per request)
-*.sublime-project
+# Sublime Text
 *.sublime-workspace
-*.sublime-settings
-Sublime\ Text\ Cache/
-Sublime\ Text\ Backup/
+*.sublime-project
+*.session
+
+# -------------------------------------------------
+# Project-specific runtime state
+# -------------------------------------------------
+.sitrepc2/
