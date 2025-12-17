@@ -41,7 +41,7 @@ def dot_path(root: Path, path: str | Path) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# 2. Database paths (new primary persistence layer)
+# 2a. Database paths (new primary persistence layer)
 # ---------------------------------------------------------------------------
 
 DB_NAME = "sitrepc2.db"
@@ -57,6 +57,26 @@ def current_db_path() -> Path:
 
 def seed_db_path() -> Path:
     return Path(files("sitrepc2") / "reference" / SEED_DB_NAME)
+
+def get_records_db_path() -> Path:
+    return current_records_db_path()
+
+# ---------------------------------------------------------------------------
+# 2b. Records database (authoritative pipeline persistence)
+# ---------------------------------------------------------------------------
+
+RECORDS_DB_NAME = "records.db"
+
+def records_db_path(root: Path) -> Path:
+    """Authoritative records database (ingest, LSS, DOM, review)."""
+    return dot_path(root, RECORDS_DB_NAME)
+
+
+def current_records_db_path() -> Path:
+    """Convenience wrapper for records.db in the current workspace."""
+    return records_db_path(find_repo_root())
+
+
 
 # ---------------------------------------------------------------------------
 # 3. Workspace paths still relevant (lexicon, tg sources)
@@ -147,3 +167,14 @@ def source_locale_lookup_path() -> Path:
 def source_direction_lookup_path() -> Path:
     return ref_path(GAZ_DIRECTIONS)
 
+
+# ---------------------------------------------------------------------------
+# 4b. Packaged SQL schemas (records DB initialization)
+# ---------------------------------------------------------------------------
+
+def schema_root() -> Path:
+    """
+    Directory containing packaged SQL schemas
+    (ingest.sql, lss.sql, dom.sql, etc.)
+    """
+    return Path(files("sitrepc2") / "schemas")

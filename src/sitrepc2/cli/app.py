@@ -7,7 +7,6 @@ from .init_cmd import app as init_app
 from .db_cmd import app as db_app
 from .source_cmd import app as source_app
 
-# 🚨 IMPORT THE CALLBACK, NOT THE APP
 from .fetch_cmd import fetch_callback as fetch
 from .extract_cmd import extract_callback as extract
 
@@ -17,6 +16,6 @@ app.add_typer(init_app, name="init")
 app.add_typer(db_app, name="db")
 app.add_typer(source_app, name="source")
 
-# ✔ register commands
+# register standalone commands
 app.command("fetch")(fetch)
 app.command("extract")(extract)
