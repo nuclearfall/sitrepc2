@@ -4,9 +4,25 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Optional, Any
 
-from sitrepc2.events.typedefs import SitRepContext
-from sitrepc2.gazetteer.typedefs import LocaleEntry
+from sitrepc2.gazetteer.typedefs import LocaleEntry, GroupEntry, RegionEntry, DirectionEntry
 from sitrepc2.spatial.clustering import ClusterDiagnostics
+
+class ContextKind(Enum):
+    LOCATION = "LOCATION"
+    REGION: "REGION"
+    DIRECTION: "DIRECTION"
+    GROUP: "GROUP"
+
+@dataclass
+class Context:
+    ctx_id: str
+    # kind is passed from spaCy to Holmes. Each string value corresponds to 
+    # the label of an entity ruler.
+    ctx_kind: ContextKind
+    text: str = ""
+
+
+    enabled: bool = True
 
 
 # ============================================================
@@ -14,25 +30,26 @@ from sitrepc2.spatial.clustering import ClusterDiagnostics
 # ============================================================
 
 @dataclass
-class ReviewNode:
+class Node:
     """
-    Abstract tree node for pre-/post-DOM review.
-    All PD nodes inherit from this.
+    Abstract tree node. All nodes inherit from this. Nodes should be enriched
+    at each stage and should be easily slotted into a CLUI/GUI.
     """
-    parent: Optional["ReviewNode"] = field(default=None, repr=False)
-    children: List["ReviewNode"] = field(default_factory=list, repr=False)
+    # Node-level ctxs.
+    ctxs: List[Context] = field(default_factory=list)
+
+    parent: Optional["Node"] = field(default=None, repr=False)
+    children: Optional[List["Node"]] = field(default_factory=list, repr=False)
 
     # GUI & display fields
     summary: str = ""
     snippet: str = ""
 
-    # Node-level contexts (from LSS)
-    contexts: List[SitRepContext] = field(default_factory=list)
-
     # Whether this node is *checked in the GUI* (user selected for DOM processing)
     enabled: bool = True
 
-    def add_child(self, node: "ReviewNode") -> None:
+
+    def add_child(self, node: "Node") -> None:
         node.parent = self
         self.children.append(node)
 
@@ -47,7 +64,7 @@ class ReviewNode:
 # ============================================================
 
 @dataclass
-class PDPost(ReviewNode):
+class Post(Node):
     post_id: str = ""
     raw_text: str = ""
 
@@ -57,7 +74,7 @@ class PDPost(ReviewNode):
 # ============================================================
 
 @dataclass
-class PDSection(ReviewNode):
+class Section(Node):
     section_id: str = ""
     raw_text: str = ""
 
@@ -67,12 +84,12 @@ class PDSection(ReviewNode):
 # ============================================================
 
 @dataclass
-class PDEvent(ReviewNode):
+class Event(Node):
     """
     PDEvent holds:
       - actor
       - action
-      - contexts (from LSS)
+      - ctxs (from LSS)
       - cluster diagnostics added during DOM
     """
     event_id: str = ""
@@ -95,9 +112,10 @@ class PDEvent(ReviewNode):
 # ============================================================
 
 @dataclass
-class PDLocation(ReviewNode):
+class Location(Node):
     """
-    Represents a single location mention from NLP.
+    Represents a single location mention from LSS. Locations
+    are 
     Has:
       - raw span text
       - LSS-derived candidates

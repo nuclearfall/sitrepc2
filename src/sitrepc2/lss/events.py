@@ -1,41 +1,40 @@
 # src/sitrepc2/lss/events.py
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Iterable, List
+from typing import Any, Iterable, List, Optional
 
-import holmes_extractor as holmes
+from spacy.tokens import Doc
 
-from .typedefs import WordMatch
+from .typedefs import WordMatch, EventMatch
 
+
+# ---------------------------------------------------------------------
+# WORD MATCHES
+# ---------------------------------------------------------------------
 
 def build_word_matches(raw_match: dict[str, Any]) -> list[WordMatch]:
     """
-    Build WordMatch objects from a raw Holmes match dict
-    (the single dict from Manager.match()).
+    Build WordMatch objects from a raw Holmes match dict.
     """
     result: list[WordMatch] = []
+
     for wm in raw_match.get("word_matches", []) or []:
-        # Required core index; if it's missing, something is badly wrong
         if "document_token_index" not in wm:
-            raise ValueError(f"Holmes word_match missing document_token_index: {wm!r}")
+            raise ValueError(
+                f"Holmes word_match missing document_token_index: {wm!r}"
+            )
 
         def _get_int(key: str, default: int | None = None) -> int:
             val = wm.get(key, default)
-            if val is None:
-                return 0
-            return int(val)
+            return 0 if val is None else int(val)
 
         def _get_opt_int(key: str) -> int | None:
             val = wm.get(key)
-            if val is None:
-                return None
-            return int(val)
+            return None if val is None else int(val)
 
         def _get_float(key: str, default: float = 1.0) -> float:
-            val = wm.get(key, default)
             try:
-                return float(val)
+                return float(wm.get(key, default))
             except Exception:
                 return default
 
@@ -43,83 +42,155 @@ def build_word_matches(raw_match: dict[str, Any]) -> list[WordMatch]:
             val = wm.get(key, default)
             return "" if val is None else str(val)
 
-        wp = WordMatch(
-            search_phrase_token_index=_get_int("search_phrase_token_index", 0),
-            search_phrase_word=_get_str("search_phrase_word"),
+        result.append(
+            WordMatch(
+                search_phrase_token_index=_get_int("search_phrase_token_index", 0),
+                search_phrase_word=_get_str("search_phrase_word"),
 
-            document_token_index=_get_int("document_token_index"),
-            first_document_token_index=_get_int(
-                "first_document_token_index", _get_int("document_token_index")
-            ),
-            last_document_token_index=_get_int(
-                "last_document_token_index", _get_int("document_token_index")
-            ),
-            structurally_matched_document_token_index=_get_int(
-                "structurally_matched_document_token_index",
-                _get_int("document_token_index"),
-            ),
+                document_token_index=_get_int("document_token_index"),
+                first_document_token_index=_get_int(
+                    "first_document_token_index",
+                    _get_int("document_token_index"),
+                ),
+                last_document_token_index=_get_int(
+                    "last_document_token_index",
+                    _get_int("document_token_index"),
+                ),
+                structurally_matched_document_token_index=_get_int(
+                    "structurally_matched_document_token_index",
+                    _get_int("document_token_index"),
+                ),
 
-            document_subword_index=_get_opt_int("document_subword_index"),
-            document_subword_containing_token_index=_get_opt_int(
-                "document_subword_containing_token_index"
-            ),
+                document_subword_index=_get_opt_int("document_subword_index"),
+                document_subword_containing_token_index=_get_opt_int(
+                    "document_subword_containing_token_index"
+                ),
 
-            document_word=_get_str("document_word"),
-            document_phrase=_get_str("document_phrase"),
+                document_word=_get_str("document_word"),
+                document_phrase=_get_str("document_phrase"),
 
-            match_type=_get_str("match_type"),
-            negated=bool(wm.get("negated", False)),
-            uncertain=bool(wm.get("uncertain", False)),
-            similarity_measure=_get_float("similarity_measure", 1.0),
-            involves_coreference=bool(wm.get("involves_coreference", False)),
+                match_type=_get_str("match_type"),
+                negated=bool(wm.get("negated", False)),
+                uncertain=bool(wm.get("uncertain", False)),
+                similarity_measure=_get_float("similarity_measure", 1.0),
+                involves_coreference=bool(wm.get("involves_coreference", False)),
 
-            extracted_word=(
-                None
-                if wm.get("extracted_word") is None
-                else str(wm.get("extracted_word"))
-            ),
-            depth=_get_int("depth", 0),
-            explanation=(
-                None
-                if wm.get("explanation") is None
-                else str(wm.get("explanation"))
-            ),
+                extracted_word=(
+                    None if wm.get("extracted_word") is None
+                    else str(wm.get("extracted_word"))
+                ),
+                depth=_get_int("depth", 0),
+                explanation=(
+                    None if wm.get("explanation") is None
+                    else str(wm.get("explanation"))
+                ),
+            )
         )
-        result.append(wp)
+
     return result
 
 
-def compute_doc_span_from_raw_word_matches(
-    raw_match: dict[str, Any],
-) -> tuple[int, int]:
-    """
-    Compute [start, end) token indices for the overall match span.
+# ---------------------------------------------------------------------
+# SPAN COMPUTATION
+# ---------------------------------------------------------------------
 
-    Uses first_document_token_index / last_document_token_index from
-    each word_match, falling back to document_token_index. End index
-    is exclusive (Shunting to doc[start:end]).
+def _compute_doc_span(raw_match: dict[str, Any]) -> tuple[int, int]:
+    """
+    Compute [start, end) token indices for the overall event span.
+    End index is exclusive.
     """
     word_matches = raw_match.get("word_matches", []) or []
     if not word_matches:
         return 0, 0
 
-    first_indices: list[int] = []
-    last_indices: list[int] = []
+    starts: list[int] = []
+    ends: list[int] = []
 
     for wm in word_matches:
-        base_idx = wm.get("document_token_index")
-        if base_idx is None:
+        base = wm.get("document_token_index")
+        if base is None:
             continue
 
-        first = wm.get("first_document_token_index", base_idx)
-        last = wm.get("last_document_token_index", base_idx)
+        start = wm.get("first_document_token_index", base)
+        end = wm.get("last_document_token_index", base)
 
-        first_indices.append(int(first))
-        last_indices.append(int(last))
+        starts.append(int(start))
+        ends.append(int(end))
 
-    if not first_indices:
+    if not starts:
         return 0, 0
 
-    start = min(first_indices)
-    end = max(last_indices) + 1  # Holmes last index is inclusive
-    return start, end
+    return min(starts), max(ends) + 1
+
+
+# ---------------------------------------------------------------------
+# EVENT MATCH CONSTRUCTION
+# ---------------------------------------------------------------------
+
+def build_event_match(
+    *,
+    raw_match: dict[str, Any],
+    doc: Doc,
+    post_id: str,
+) -> EventMatch:
+    """
+    Build a single EventMatch from a raw Holmes match dict.
+    """
+    start, end = _compute_doc_span(raw_match)
+
+    text = (
+        raw_match.get("sentences_within_document")
+        or doc[start:end].text
+    )
+
+    return EventMatch(
+        event_id=str(raw_match.get("event_id") or raw_match.get("id")),
+        post_id=post_id,
+
+        label=str(raw_match.get("label", "")),
+        search_phrase_text=str(raw_match.get("search_phrase_text", "")),
+        sentences_within_document=text,
+
+        overall_similarity=float(
+            raw_match.get("overall_similarity_measure", 1.0)
+        ),
+        negated=bool(raw_match.get("negated", False)),
+        uncertain=bool(raw_match.get("uncertain", False)),
+        involves_coreference=bool(
+            raw_match.get("involves_coreference", False)
+        ),
+
+        doc_start_token_index=start,
+        doc_end_token_index=end,
+
+        word_matches=build_word_matches(raw_match),
+        raw_match=raw_match,
+    )
+
+
+def build_event_matches(
+    *,
+    raw_matches: Iterable[dict[str, Any]],
+    doc: Doc,
+    post_id: str,
+    min_similarity: float = 0.0,
+) -> list[EventMatch]:
+    """
+    Build EventMatch objects for all raw Holmes matches for a document.
+    """
+    events: list[EventMatch] = []
+
+    for raw in raw_matches:
+        sim = float(raw.get("overall_similarity_measure", 1.0))
+        if sim < min_similarity:
+            continue
+
+        events.append(
+            build_event_match(
+                raw_match=raw,
+                doc=doc,
+                post_id=post_id,
+            )
+        )
+
+    return events

@@ -1,70 +1,109 @@
-# sitrepc2/nlp/sectioning.py
+# src/sitrepc2/lss/sectioning.py
+
+from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import List
-from spacy.tokens import Doc
-from sitrepc2.lss.typedefs import Section, SitRepContext, CtxKind
+
+
+# ---------------------------------------------------------------------
+# Data contract
+# ---------------------------------------------------------------------
+
+@dataclass(frozen=True, slots=True)
+class LSSSection:
+    section_id: str
+    position: int
+    text: str
+
+
+# ---------------------------------------------------------------------
+# Heuristics
+# ---------------------------------------------------------------------
 
 SECTION_HEADING_RE = re.compile(
-    r"^\s*(?:[-•*]|#+|\*)\s*[A-ZА-ЯЁІЇЄҐ][^:]{2,}:?$"
+    r"""
+    ^\s*
+    (?:[-•*]+|\#{1,6})?\s*
+    [A-ZА-ЯЁІЇЄҐ][^:\n]{2,}
+    :?\s*$
+    """,
+    re.VERBOSE,
 )
 
-def split_into_sections(post_text: str, doc: Doc) -> List[Section]:
+
+# ---------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------
+
+def split_into_sections(post_text: str) -> List[LSSSection]:
     """
-    Deterministic section splitter.
-    Uses:
-        • entity-ruler detected DIRECTION/GROUP/REGION at line start
-        • formatting cues
-        • fallback multi-paragraph splitting
+    Deterministically split a post into ordered sections.
+
+    Rules (in order):
+      1. Heading-like lines start new sections
+      2. Blank-line separation is preserved
+      3. Long sections may be split by paragraph blocks
+
+    This function is PURE:
+      - no NLP
+      - no semantics
+      - no context inference
     """
 
-    lines = post_text.split("\n")
-    sections: List[Section] = []
+    lines = post_text.splitlines()
+    sections: list[list[str]] = []
+    current: list[str] = []
 
-    current_lines = []
-    current_id = 0
+    def flush():
+        nonlocal current
+        if current:
+            sections.append(current)
+            current = []
 
-    def flush_section():
-        nonlocal current_id, current_lines
-        if not current_lines:
-            return
-        text = "\n".join(current_lines).strip()
-        section = Section(section_id=f"S{current_id}", text=text)
-        sections.append(section)
-        current_id += 1
-        current_lines = []
+    # -------------------------------------------------
+    # Pass 1: heading-based splitting
+    # -------------------------------------------------
 
-    # Pass 1: split by headings & entity cues
-    for i, line in enumerate(lines):
+    for line in lines:
         stripped = line.strip()
 
-        # Heading-style boundaries
-        if SECTION_HEADING_RE.match(stripped):
-            flush_section()
-            current_lines.append(line)
-            continue
-
-        # Entity-based boundaries
-        ents = [ent for ent in doc.ents if ent.start_char >= doc.char_span(i) and ent.start_char < doc.char_span(i+1)]
-        if any(ent.label_ in {"DIRECTION", "GROUP", "REGION"} for ent in ents):
-            flush_section()
-            current_lines.append(line)
-            continue
-
-        current_lines.append(line)
-
-    flush_section()
-
-    # Pass 2: Fallback — split long freeform text
-    final_sections = []
-    for section in sections:
-        if len(section.text) > 800 and "\n\n" in section.text:
-            paragraphs = section.text.split("\n\n")
-            for idx, p in enumerate(paragraphs):
-                final_sections.append(
-                    Section(section_id=f"{section.section_id}.{idx}", text=p.strip())
-                )
+        if stripped and SECTION_HEADING_RE.match(stripped):
+            flush()
+            current.append(line)
         else:
-            final_sections.append(section)
+            current.append(line)
 
-    return final_sections
+    flush()
+
+    # -------------------------------------------------
+    # Pass 2: paragraph fallback for very long sections
+    # -------------------------------------------------
+
+    final_sections: list[str] = []
+
+    for block in sections:
+        text = "\n".join(block).strip()
+
+        if len(text) > 800 and "\n\n" in text:
+            paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+            final_sections.extend(paragraphs)
+        else:
+            final_sections.append(text)
+
+    # -------------------------------------------------
+    # Emit structured sections
+    # -------------------------------------------------
+
+    out: list[LSSSection] = []
+    for idx, text in enumerate(final_sections):
+        out.append(
+            LSSSection(
+                section_id=f"S{idx}",
+                position=idx,
+                text=text,
+            )
+        )
+
+    return out
