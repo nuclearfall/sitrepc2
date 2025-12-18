@@ -8,13 +8,17 @@ from typing import List
 
 
 # ---------------------------------------------------------------------
-# Data contract
+# Data contract (pre-persistence)
 # ---------------------------------------------------------------------
 
 @dataclass(frozen=True, slots=True)
 class LSSSection:
-    section_id: str
-    position: int
+    """
+    Pure structural section emitted by LSS sectioning.
+
+    Identity is assigned only at persistence time.
+    """
+    ordinal: int
     text: str
 
 
@@ -49,7 +53,7 @@ def split_into_sections(post_text: str) -> List[LSSSection]:
     This function is PURE:
       - no NLP
       - no semantics
-      - no context inference
+      - no persistence
     """
 
     lines = post_text.splitlines()
@@ -81,27 +85,28 @@ def split_into_sections(post_text: str) -> List[LSSSection]:
     # Pass 2: paragraph fallback for very long sections
     # -------------------------------------------------
 
-    final_sections: list[str] = []
+    final_text_blocks: list[str] = []
 
     for block in sections:
         text = "\n".join(block).strip()
 
         if len(text) > 800 and "\n\n" in text:
-            paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-            final_sections.extend(paragraphs)
+            paragraphs = [
+                p.strip() for p in text.split("\n\n") if p.strip()
+            ]
+            final_text_blocks.extend(paragraphs)
         else:
-            final_sections.append(text)
+            final_text_blocks.append(text)
 
     # -------------------------------------------------
-    # Emit structured sections
+    # Emit ordered sections
     # -------------------------------------------------
 
     out: list[LSSSection] = []
-    for idx, text in enumerate(final_sections):
+    for idx, text in enumerate(final_text_blocks):
         out.append(
             LSSSection(
-                section_id=f"S{idx}",
-                position=idx,
+                ordinal=idx,
                 text=text,
             )
         )

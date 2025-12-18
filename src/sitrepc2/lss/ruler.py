@@ -1,213 +1,159 @@
-# src/sitrepc2/lss/rulers.py
+# src/sitrepc2/lss/ruler.py
 from __future__ import annotations
 
-from typing import List, Set, Tuple
+import sqlite3
+from collections import defaultdict
+from typing import Dict, Iterable, List
 
 from spacy.language import Language
 from spacy.pipeline import EntityRuler
 
-from sitrepc2.util.normalize import normalize_location_key
-from sitrepc2.gazetteer.aliases import (
-    gather_aliases,
-    gather_aliases_from_db,
-)
-from sitrepc2.gazetteer.typedefs import (
-    LocaleEntry,
-    RegionEntry,
-    GroupEntry,
-    DirectionEntry,
-)
+from sitrepc2.config.paths import get_gazetteer_db_path
+
+# ---------------------------------------------------------------------------
+# DB helpers
+# ---------------------------------------------------------------------------
+
+def _conn() -> sqlite3.Connection:
+    con = sqlite3.connect(get_gazetteer_db_path())
+    con.row_factory = sqlite3.Row
+    con.execute("PRAGMA foreign_keys = ON;")
+    return con
 
 
-# -----------------------------
-# Helpers
-# -----------------------------
-
-def _simple_alias_patterns(aliases: Set[str], label: str) -> List[dict]:
+def _load_aliases() -> Dict[str, List[str]]:
     """
-    Produce simple exact-match patterns (case-insensitive automatically in spaCy).
-    Used for LOCALE, REGION, GROUP.
+    Load all aliases from the unified aliases VIEW.
 
-    aliases are already normalized strings (via normalize_location_key).
+    Returns:
+        Mapping of entity_type -> list of normalized alias strings.
+        entity_type values are expected to already be canonical
+        (LOCATION, REGION, GROUP, DIRECTION).
     """
-    return [{"label": label, "pattern": alias} for alias in sorted(aliases)]
+    out: Dict[str, List[str]] = defaultdict(list)
+
+    with _conn() as con:
+        rows = con.execute(
+            """
+            SELECT entity_type, normalized
+            FROM aliases
+            WHERE normalized IS NOT NULL
+            """
+        ).fetchall()
+
+    for row in rows:
+        et = row["entity_type"]
+        alias = row["normalized"]
+
+        if isinstance(et, str) and isinstance(alias, str) and alias.strip():
+            out[et].append(alias.strip())
+
+    # Deduplicate per entity_type
+    for et in out:
+        out[et] = sorted(set(out[et]))
+
+    return out
 
 
-def _direction_phrase_patterns(aliases: Set[str]) -> List[dict]:
+# ---------------------------------------------------------------------------
+# Pattern builders
+# ---------------------------------------------------------------------------
+
+def _simple_alias_patterns(
+    aliases: Iterable[str],
+    label: str,
+) -> List[dict]:
     """
-    Produce LOWER-token patterns for directions for:
-        - in the direction of X
-        - towards X
-        - X direction
-        - X axis
-        - X sector
-        - the X line
+    Build token-based EntityRuler patterns for exact phrase matching.
 
-    aliases are normalized strings (e.g. "avdiivka", not "Avdiivka direction").
+    Aliases are assumed to already be normalized (lowercase).
     """
     patterns: List[dict] = []
 
-    for alias in sorted(aliases):
-        # alias is assumed already normalized, but be idempotent:
-        norm = normalize_location_key(alias)
+    for alias in aliases:
+        tokens = alias.split()
 
-        # Token-based case-insensitive patterns
-        patterns.extend(
-            [
-                # in the direction of X
-                {
-                    "label": "DIRECTION",
-                    "pattern": [
-                        {"LOWER": "in"},
-                        {"LOWER": "the"},
-                        {"LOWER": "direction"},
-                        {"LOWER": "of"},
-                        {"LOWER": norm},
-                    ],
-                },
-                # towards X
-                {
-                    "label": "DIRECTION",
-                    "pattern": [
-                        {"LOWER": "towards"},
-                        {"LOWER": norm},
-                    ],
-                },
-                # X direction
-                {
-                    "label": "DIRECTION",
-                    "pattern": [
-                        {"LOWER": norm},
-                        {"LOWER": "direction"},
-                    ],
-                },
-                # X axis
-                {
-                    "label": "DIRECTION",
-                    "pattern": [
-                        {"LOWER": norm},
-                        {"LOWER": "axis"},
-                    ],
-                },
-                # X sector
-                {
-                    "label": "DIRECTION",
-                    "pattern": [
-                        {"LOWER": norm},
-                        {"LOWER": "sector"},
-                    ],
-                },
-                # the X line
-                {
-                    "label": "DIRECTION",
-                    "pattern": [
-                        {"LOWER": "the"},
-                        {"LOWER": norm},
-                        {"LOWER": "line"},
-                    ],
-                },
-            ]
+        pattern = [{"LOWER": t} for t in tokens]
+
+        patterns.append(
+            {
+                "label": label,
+                "pattern": pattern,
+                "id": f"{label}:{alias}",
+            }
         )
 
     return patterns
 
 
+# ---------------------------------------------------------------------------
+# EntityRuler management
+# ---------------------------------------------------------------------------
+
 def _ensure_entity_ruler(nlp: Language) -> EntityRuler:
     """
-    Get or create the spaCy EntityRuler in a sensible position
-    relative to `ner` if present.
+    Ensure a clean EntityRuler exists and is configured
+    to overwrite default NER entities.
     """
-    if "entity_ruler" in nlp.pipe_names:
-        ruler = nlp.get_pipe("entity_ruler")
-    else:
-        if "ner" in nlp.pipe_names:
-            ruler = nlp.add_pipe("entity_ruler", before="ner")
-        else:
-            ruler = nlp.add_pipe("entity_ruler")
+    # Remove existing custom ruler if present
+    if "custom_entity_ruler" in nlp.pipe_names:
+        nlp.remove_pipe("custom_entity_ruler")
 
-    assert isinstance(ruler, EntityRuler)
-    ruler.validate = True
-    ruler.ent_id_sep = None
+    # Insert after NER if present (so we overwrite it)
+    if "ner" in nlp.pipe_names:
+        ruler = nlp.add_pipe(
+            "entity_ruler",
+            after="ner",
+            name="custom_entity_ruler",
+        )
+    else:
+        ruler = nlp.add_pipe(
+            "entity_ruler",
+            name="custom_entity_ruler",
+        )
+
+    ruler.overwrite = True
+    ruler.ent_id_sep = "|"
+
     return ruler
 
 
-def _install_patterns_from_alias_lists(
-    nlp: Language,
-    locale_aliases: List[str],
-    region_aliases: List[str],
-    group_aliases: List[str],
-    direction_aliases: List[str],
-) -> Language:
+def _install_patterns(nlp: Language) -> Language:
     """
-    Core installer that takes precomputed alias lists and wires up the
-    EntityRuler with LOCALE / REGION / GROUP / DIRECTION patterns.
+    Install DB-backed EntityRuler patterns from gazetteer aliases.
     """
     ruler = _ensure_entity_ruler(nlp)
 
-    # LOCALE / REGION / GROUP simple string patterns
-    ruler.add_patterns(_simple_alias_patterns(set(locale_aliases), "LOCALE"))
-    ruler.add_patterns(_simple_alias_patterns(set(region_aliases), "REGION"))
-    ruler.add_patterns(_simple_alias_patterns(set(group_aliases), "GROUP"))
+    aliases_by_entity = _load_aliases()
 
-    # DIRECTION phrase patterns (token-based)
-    ruler.add_patterns(_direction_phrase_patterns(set(direction_aliases)))
+    total_patterns = 0
+
+    print("\n" + "=" * 60)
+    print("ENTITY RULER PATTERN LOADING")
+    print("=" * 60)
+
+    for entity_type, aliases in aliases_by_entity.items():
+        patterns = _simple_alias_patterns(aliases, entity_type)
+        ruler.add_patterns(patterns)
+        total_patterns += len(patterns)
+
+        print(f"✓ {entity_type:<9} patterns: {len(patterns)}")
+
+    print(f"Total patterns loaded: {total_patterns}")
+    print("=" * 60 + "\n")
 
     return nlp
 
 
-# -----------------------------
-# Main entry points
-# -----------------------------
-
-def add_entity_rulers(
-    nlp: Language,
-    *,
-    locales: List[LocaleEntry],
-    regions: List[RegionEntry],
-    groups: List[GroupEntry],
-    directions: List[DirectionEntry],
-) -> Language:
-    """
-    Install EntityRuler and populate it from in-memory gazetteer dataclasses:
-
-        - locale aliases
-        - region aliases
-        - group aliases
-        - direction aliases + direction phrase patterns
-
-    This is the "dataclass-aware" entry point used when you already have
-    LocaleEntry / RegionEntry / GroupEntry / DirectionEntry lists in memory
-    (e.g. via GazetteerIndex.from_db()).
-    """
-    locale_aliases, region_aliases, group_aliases, direction_aliases = gather_aliases(
-        locales, regions, groups, directions
-    )
-
-    return _install_patterns_from_alias_lists(
-        nlp,
-        locale_aliases=locale_aliases,
-        region_aliases=region_aliases,
-        group_aliases=group_aliases,
-        direction_aliases=direction_aliases,
-    )
-
+# ---------------------------------------------------------------------------
+# Public entry point (used by LSS)
+# ---------------------------------------------------------------------------
 
 def add_entity_rulers_from_db(nlp: Language) -> Language:
     """
-    Convenience entry point: load all gazetteer aliases directly from the
-    SQLite database (via gather_aliases_from_db) and install EntityRuler.
+    Install DB-backed EntityRuler patterns for LSS.
 
-    This is useful when you don't need the dataclasses in the NLP layer and
-    just want the gazetteer-backed patterns available in spaCy.
+    Emits canonical uppercase entity labels:
+        LOCATION, REGION, GROUP, DIRECTION
     """
-    locale_aliases, region_aliases, group_aliases, direction_aliases = (
-        gather_aliases_from_db()
-    )
-
-    return _install_patterns_from_alias_lists(
-        nlp,
-        locale_aliases=locale_aliases,
-        region_aliases=region_aliases,
-        group_aliases=group_aliases,
-        direction_aliases=direction_aliases,
-    )
+    return _install_patterns(nlp)

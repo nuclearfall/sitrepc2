@@ -11,7 +11,7 @@ import typer
 
 from sitrepc2.config.paths import (
     get_dotpath,
-    db_path,                # sitrepc2.db (lookup DB)
+    db_path,                # gazetteer.db (lookup DB)
     reference_root,
     schema_root,            # schemas/
     records_db_path,        # records.db (authoritative pipeline DB)
@@ -26,6 +26,28 @@ app = typer.Typer(
 # ----------------------------------------------------------------------
 # Internal helpers
 # ----------------------------------------------------------------------
+def _apply_all_schemas(db_path: Path, schema_dir: Path) -> None:
+    """
+    Apply all SQL schema files in schema_dir to db_path.
+
+    Schemas are applied in lexicographic order to ensure
+    dependency safety (ingest → lss → dom → review).
+    """
+    if not schema_dir.exists() or not schema_dir.is_dir():
+        raise RuntimeError(f"Schema directory not found: {schema_dir}")
+
+    sql_files = sorted(schema_dir.glob("*.sql"))
+    if not sql_files:
+        raise RuntimeError(f"No .sql schema files found in {schema_dir}")
+
+    with sqlite3.connect(db_path) as con:
+        con.execute("PRAGMA foreign_keys = ON;")
+        for sql_file in sql_files:
+            typer.secho(
+                f"Applying schema: {sql_file.name}",
+                fg=typer.colors.CYAN,
+            )
+            con.executescript(sql_file.read_text(encoding="utf-8"))
 
 def _apply_sql(db_path: Path, sql_path: Path) -> None:
     if not sql_path.exists():
@@ -38,7 +60,8 @@ def _apply_sql(db_path: Path, sql_path: Path) -> None:
 
 def _init_records_db(dot: Path) -> Path:
     """
-    Create and initialize the authoritative records.db.
+    Create and initialize the authoritative records.db
+    using all packaged SQL schemas.
     """
     records_db = records_db_path(dot.parent)
     records_db.parent.mkdir(parents=True, exist_ok=True)
@@ -55,12 +78,11 @@ def _init_records_db(dot: Path) -> Path:
             fg=typer.colors.YELLOW,
         )
 
-    schemas = schema_root()
-    for schema in ("ingest.sql", "lss.sql"):
-        typer.secho(f"Applying schema: {schema}", fg=typer.colors.CYAN)
-        _apply_sql(records_db, schemas / schema)
+    schema_dir = schema_root()
+    _apply_all_schemas(records_db, schema_dir)
 
     return records_db
+
 
 
 def _spacy_model_installed(model: str) -> bool:
@@ -108,13 +130,18 @@ def init(
         Path("."),
         help="Project root to initialize (default: current directory).",
     ),
+    reconfigure: bool = typer.Option(
+        False,
+        "--reconfigure",
+        help="Remove existing .sitrepc2 workspace and reinitialize from scratch.",
+    ),
 ):
     """
     Initialize a sitrepc2 workspace at PATH.
 
     This will:
       • create a `.sitrepc2/` directory if missing
-      • copy the packaged lookup seed DB (`sitrepc2.db`) if missing
+      • copy the packaged lookup seed DB (`gazetteer.db`) if missing
       • create and initialize `records.db`
       • copy reference files if missing
       • ensure required spaCy and Coreferee models are installed
@@ -124,10 +151,19 @@ def init(
 
     project_root = path.resolve()
     dot = get_dotpath(project_root)
+
+    if reconfigure and dot.exists():
+        typer.secho(
+            f"Reconfiguring workspace: removing {dot}",
+            fg=typer.colors.RED,
+            bold=True,
+        )
+        shutil.rmtree(dot)
+        
     dot.mkdir(parents=True, exist_ok=True)
 
     # ------------------------------------------------------------------
-    # 1. Copy lookup seed database (sitrepc2.db)
+    # 1. Copy lookup seed database (gazetteer.db)
     # ------------------------------------------------------------------
     lookup_db = db_path(project_root)
     if lookup_db.exists():
@@ -136,7 +172,7 @@ def init(
             fg=typer.colors.YELLOW,
         )
     else:
-        src_db = reference_root() / "sitrepc2_seed.db"
+        src_db = reference_root() / "gazetteer_seed.db"
         if not src_db.exists():
             raise RuntimeError(
                 f"Seed database not found at {src_db}. "

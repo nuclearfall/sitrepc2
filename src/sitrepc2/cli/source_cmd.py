@@ -9,9 +9,9 @@ import typer
 from rich import print
 from rich.table import Table
 
-from sitrepc2.config.paths import current_root, tg_channels_path
+from sitrepc2.config.paths import current_root, sources_path
 
-app = typer.Typer(help="Manage social media source channels (tg_channels.jsonl).")
+app = typer.Typer(help="Manage social media source channels (sources.jsonl).")
 
 
 # ---------------------------------------------------------------------------
@@ -19,9 +19,9 @@ app = typer.Typer(help="Manage social media source channels (tg_channels.jsonl).
 # ---------------------------------------------------------------------------
 
 def _channel_file() -> Path:
-    """Return the workspace tg_channels.jsonl path (under .sitrepc2/)."""
+    """Return the workspace sources.jsonl path (under .sitrepc2/)."""
     root = current_root()
-    return tg_channels_path(root)
+    return sources_path(root)
 
 
 def _normalize_name(name: str) -> str:
@@ -76,7 +76,7 @@ def _print_channels(channels: List[Dict[str, Any]]) -> None:
         print("[yellow]No sources configured.[/yellow]")
         return
 
-    table = Table(title="Sources (tg_channels.jsonl)")
+    table = Table(title="Sources (sources.jsonl)")
     table.add_column("channel_name")
     table.add_column("alias")
     table.add_column("lang")
@@ -106,7 +106,7 @@ def list_sources(
     )
 ):
     """
-    List all configured social-media sources from tg_channels.jsonl.
+    List all configured social-media sources from sources.jsonl.
     """
     channels = _load_channels()
     if active_only:

@@ -1,18 +1,39 @@
 # src/sitrepc2/gazetteer/io.py
 from __future__ import annotations
 
-from dataclasses import asdict
 from typing import List, Dict, Optional, Iterable
-
-from sitrepc2.db.core import connect
+from pathlib import Path
 from sitrepc2.gazetteer.typedefs import (
     LocaleEntry,
     RegionEntry,
     GroupEntry,
     DirectionEntry,
 )
+import sqlite3
 from sitrepc2.util.serialization import deserialize
+from sitrepc2.config.paths import current_db_path
+# ------------------------------
+# Local DB connection helper
+# ------------------------------
 
+def connect() -> sqlite3.Connection:
+    """
+    Open a read-only connection to the authoritative records database.
+
+    Gazetteer access is read-only and isolated from other persistence layers.
+    """
+    db_path = Path(current_db_path())
+
+    if not db_path.exists():
+        raise RuntimeError(
+            f"Database not found at {db_path}. "
+            "Run `sitrepc2 init` first."
+        )
+
+    con = sqlite3.connect(db_path)
+    con.row_factory = sqlite3.Row
+    con.execute("PRAGMA foreign_keys = ON;")
+    return con
 
 # ------------------------------
 # Alias / list helpers
@@ -39,24 +60,15 @@ def unpack_int_list(s: str | None) -> List[int]:
         try:
             out.append(int(part))
         except ValueError:
-            # Be forgiving; you can tighten this later if needed.
             continue
     return out
 
 
 # ------------------------------
-# Locale Loader (from DB)
+# Locale Loader
 # ------------------------------
 
 def load_locales_from_db() -> List[LocaleEntry]:
-    """
-    Load all LocaleEntry objects from the SQLite database.
-
-    Maps directly from the `locales` table:
-
-        cid, name, aliases, place, wikidata,
-        group_id, usage, lon, lat, region_id
-    """
     conn = connect()
     try:
         rows = conn.execute(
@@ -79,7 +91,6 @@ def load_locales_from_db() -> List[LocaleEntry]:
 
         out: List[LocaleEntry] = []
         for row in rows:
-            # Build a dict aligned with LocaleEntry fields
             data = {
                 "cid": str(row["cid"]),
                 "name": row["name"],
@@ -90,11 +101,7 @@ def load_locales_from_db() -> List[LocaleEntry]:
                 "group_id": row["group_id"],
                 "place": row["place"],
                 "wikidata": row["wikidata"],
-                # usage is stored as TEXT or NULL; coerce to int with a sane default
-                "usage": int(row["usage"]) if row["usage"] not in (None, "") else 0,
-                # `source` will fall back to dataclass default ("base") if omitted,
-                # but we can be explicit if you like:
-                # "source": "db",
+                #"usage": int(row["usage"]) if row["usage"] not in (None, "") else 0,
             }
             out.append(deserialize(data, LocaleEntry))
         return out
@@ -103,19 +110,10 @@ def load_locales_from_db() -> List[LocaleEntry]:
 
 
 # ------------------------------
-# Region Loader (from DB)
+# Region Loader
 # ------------------------------
 
 def load_regions_from_db() -> List[RegionEntry]:
-    """
-    Load all RegionEntry objects from the SQLite database.
-
-    Maps from `regions`:
-
-        osm_id, wikidata, iso3166_2, name, aliases, neighbors
-
-    where `aliases` and `neighbors` are ';'-separated lists.
-    """
     conn = connect()
     try:
         rows = conn.execute(
@@ -149,19 +147,10 @@ def load_regions_from_db() -> List[RegionEntry]:
 
 
 # ------------------------------
-# Group Loader (from DB)
+# Group Loader
 # ------------------------------
 
 def load_groups_from_db() -> List[GroupEntry]:
-    """
-    Load all GroupEntry objects from the SQLite database.
-
-    Maps from `groups`:
-
-        group_id, name, aliases, region_ids, neighbor_ids
-
-    where `aliases`, `region_ids`, and `neighbor_ids` are ';'-separated lists.
-    """
     conn = connect()
     try:
         rows = conn.execute(
@@ -193,20 +182,12 @@ def load_groups_from_db() -> List[GroupEntry]:
 
 
 # ------------------------------
-# Direction Loader (from DB)
+# Direction Loader
 # ------------------------------
+
 def load_directions_from_db(
     locale_by_cid: Optional[Dict[str, LocaleEntry]] = None,
 ) -> List[DirectionEntry]:
-    """
-    Load all DirectionEntry objects from the SQLite database.
-
-    Maps from `directions`:
-
-        dir_id, name, anchor_cid
-
-    Direction aliases are inherited from the anchor locale.
-    """
     conn = connect()
     try:
         rows = conn.execute(
@@ -221,17 +202,10 @@ def load_directions_from_db(
         ).fetchall()
 
         out: List[DirectionEntry] = []
-
         for row in rows:
             anchor_cid = str(row["anchor_cid"])
-            anchor: Optional[LocaleEntry] = None
-            aliases: List[str] = []
-
-            if locale_by_cid is not None:
-                anchor = locale_by_cid.get(anchor_cid)
-                if anchor is not None:
-                    # Inherit aliases from the anchor locale
-                    aliases = list(anchor.aliases)
+            anchor = locale_by_cid.get(anchor_cid) if locale_by_cid else None
+            aliases = list(anchor.aliases) if anchor else []
 
             data = {
                 "dir_id": int(row["dir_id"]) if row["dir_id"] is not None else None,
@@ -240,10 +214,36 @@ def load_directions_from_db(
                 "anchor": anchor,
                 "aliases": aliases,
             }
-
             out.append(deserialize(data, DirectionEntry))
 
         return out
     finally:
         conn.close()
 
+
+# ------------------------------
+# Gazetteer aggregate loader (AUTHORITATIVE)
+# ------------------------------
+
+def load_gazetteer_from_db() -> tuple[
+    List[LocaleEntry],
+    List[RegionEntry],
+    List[GroupEntry],
+    List[DirectionEntry],
+]:
+    """
+    Load the full gazetteer from the SQLite database.
+
+    Returns:
+        locales, regions, groups, directions
+
+    This is the ONLY supported aggregate loader.
+    """
+    locales = load_locales_from_db()
+    regions = load_regions_from_db()
+    groups = load_groups_from_db()
+
+    locale_by_cid = {l.cid: l for l in locales}
+    directions = load_directions_from_db(locale_by_cid=locale_by_cid)
+
+    return locales, regions, groups, directions

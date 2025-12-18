@@ -121,8 +121,11 @@ CREATE TABLE IF NOT EXISTS lss_role_candidates (
 
     lss_event_id INTEGER NOT NULL,
 
+    -- Provenance (CRITICAL)
+    source TEXT NOT NULL,                  -- 'HOLMES' | 'LSS'
+
     -- Inferred role kind (derived, not resolved)
-    role_kind TEXT NOT NULL,               -- ACTOR / ACTION / LOCATION
+    role_kind TEXT NOT NULL,               -- ACTOR / ACTION / LOCATION / RAW
 
     -- Matched text
     document_word TEXT NOT NULL,
@@ -132,8 +135,8 @@ CREATE TABLE IF NOT EXISTS lss_role_candidates (
     start_token INTEGER NOT NULL,
     end_token INTEGER NOT NULL,
 
-    -- LSS signals
-    match_type TEXT,
+    -- Structural signals
+    match_type TEXT,                       -- Holmes-only
     negated BOOLEAN NOT NULL,
     uncertain BOOLEAN NOT NULL,
     involves_coreference BOOLEAN NOT NULL,
@@ -188,6 +191,8 @@ ON lss_runs(ingest_post_id);
 CREATE INDEX IF NOT EXISTS idx_lss_runs_completed
 ON lss_runs(completed_at);
 
+CREATE INDEX IF NOT EXISTS idx_lss_role_candidates_source
+ON lss_role_candidates(source);
 
 -- -------------------------------------------------
 -- LSS sections

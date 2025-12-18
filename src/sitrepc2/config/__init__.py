@@ -8,9 +8,10 @@ from .paths import (
     get_dotpath,
     dot_path,
     db_path,
-    current_db_path,
+    get_gazetteer_db_path,
+    get_records_db_path,
     lexicon_path,
-    tg_channels_path,
+    sources_path,
     reference_root,
     ref_path,
     source_gazetteer_paths,   # Optional: still exists for seeding DB

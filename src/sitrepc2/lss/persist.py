@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -12,25 +13,25 @@ UTC = timezone.utc
 
 
 # ---------------------------------------------------------------------
-# DB connection helpers
+# Connection / transaction helpers
 # ---------------------------------------------------------------------
 
-def _conn() -> sqlite3.Connection:
-    """
-    Open a connection to the authoritative records database.
-
-    Foreign key enforcement is enabled explicitly, as SQLite
-    does NOT enable it by default.
-    """
-    con = sqlite3.connect(get_records_db_path())
-    con.execute("PRAGMA foreign_keys = ON;")
-    return con
-
-
-
 def _utc_now_iso() -> str:
-    """Return current UTC time as ISO-8601 string."""
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+@contextmanager
+def _connection() -> sqlite3.Connection:
+    con = sqlite3.connect(get_records_db_path())
+    try:
+        con.execute("PRAGMA foreign_keys = ON;")
+        yield con
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.close()
 
 
 # ---------------------------------------------------------------------
@@ -44,31 +45,20 @@ def create_lss_run(
     engine_version: Optional[str] = None,
     model: Optional[str] = None,
 ) -> int:
-    """
-    Create a new LSS run for a single ingest post.
-    Returns the lss_runs.id primary key.
-    """
-    with _conn() as con:
+    with _connection() as con:
         cur = con.execute(
             """
             INSERT INTO lss_runs
                 (ingest_post_id, started_at, engine, engine_version, model)
             VALUES (?, ?, ?, ?, ?)
             """,
-            (
-                ingest_post_id,
-                _utc_now_iso(),
-                engine,
-                engine_version,
-                model,
-            ),
+            (ingest_post_id, _utc_now_iso(), engine, engine_version, model),
         )
         return int(cur.lastrowid)
 
 
 def complete_lss_run(lss_run_id: int) -> None:
-    """Mark an LSS run as completed."""
-    with _conn() as con:
+    with _connection() as con:
         con.execute(
             """
             UPDATE lss_runs
@@ -92,10 +82,7 @@ def persist_section(
     start_token: Optional[int] = None,
     end_token: Optional[int] = None,
 ) -> int:
-    """
-    Persist a detected section and return its database ID.
-    """
-    with _conn() as con:
+    with _connection() as con:
         cur = con.execute(
             """
             INSERT INTO lss_sections
@@ -103,14 +90,7 @@ def persist_section(
                  start_token, end_token, ordinal)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (
-                lss_run_id,
-                ingest_post_id,
-                text,
-                start_token,
-                end_token,
-                ordinal,
-            ),
+            (lss_run_id, ingest_post_id, text, start_token, end_token, ordinal),
         )
         return int(cur.lastrowid)
 
@@ -136,10 +116,7 @@ def persist_event(
     involves_coreference: bool,
     section_id: Optional[int] = None,
 ) -> int:
-    """
-    Persist a single LSS-extracted event and return its database ID.
-    """
-    with _conn() as con:
+    with _connection() as con:
         cur = con.execute(
             """
             INSERT INTO lss_events
@@ -177,7 +154,8 @@ def persist_event(
 def persist_role_candidate(
     *,
     lss_event_id: int,
-    role_kind: str,
+    source: str,                # 'HOLMES' | 'LSS'
+    role_kind: str,             # ACTOR / ACTION / LOCATION / RAW
     document_word: str,
     document_phrase: Optional[str],
     start_token: int,
@@ -189,23 +167,21 @@ def persist_role_candidate(
     similarity: Optional[float],
     explanation: Optional[str],
 ) -> None:
-    """
-    Persist a single role candidate derived from a Holmes WordMatch.
-    """
-    with _conn() as con:
+    with _connection() as con:
         con.execute(
             """
             INSERT INTO lss_role_candidates
-                (lss_event_id, role_kind,
+                (lss_event_id, source, role_kind,
                  document_word, document_phrase,
                  start_token, end_token,
                  match_type, negated, uncertain,
                  involves_coreference, similarity,
                  explanation)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 lss_event_id,
+                source,
                 role_kind,
                 document_word,
                 document_phrase,
@@ -218,6 +194,29 @@ def persist_role_candidate(
                 similarity,
                 explanation,
             ),
+        )
+
+
+def persist_holmes_word_matches(
+    *,
+    lss_event_id: int,
+    word_matches: list,
+) -> None:
+    for wm in word_matches:
+        persist_role_candidate(
+            lss_event_id=lss_event_id,
+            source="HOLMES",
+            role_kind="RAW",
+            document_word=wm.document_word,
+            document_phrase=wm.document_phrase,
+            start_token=wm.first_document_token_index,
+            end_token=wm.last_document_token_index + 1,
+            match_type=wm.match_type,
+            negated=wm.negated,
+            uncertain=wm.uncertain,
+            involves_coreference=wm.involves_coreference,
+            similarity=wm.similarity_measure,
+            explanation=wm.explanation,
         )
 
 
@@ -234,11 +233,7 @@ def persist_context_span(
     start_token: Optional[int] = None,
     end_token: Optional[int] = None,
 ) -> None:
-    """
-    Persist a contextual span detected by LSS.
-    Contexts are not yet bound to events or locations.
-    """
-    with _conn() as con:
+    with _connection() as con:
         con.execute(
             """
             INSERT INTO lss_context_spans
@@ -247,12 +242,5 @@ def persist_context_span(
                  start_token, end_token)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (
-                lss_run_id,
-                ingest_post_id,
-                ctx_kind,
-                text,
-                start_token,
-                end_token,
-            ),
+            (lss_run_id, ingest_post_id, ctx_kind, text, start_token, end_token),
         )

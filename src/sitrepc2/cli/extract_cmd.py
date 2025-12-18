@@ -1,8 +1,7 @@
-# src/sitrepc2/cli/extract_cmd.py
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime
+from datetime import date
 from typing import Optional, List
 
 import typer
@@ -23,14 +22,19 @@ def extract_callback(
     publisher: Optional[str] = typer.Option(
         None, help="Filter by upstream publisher."
     ),
-    date: Optional[str] = typer.Option(
-        None, help="Published date (UTC) in YYYYMMDD format."
+    pub_date: Optional[str] = typer.Option(
+        None, help="Published date (UTC) in YYYY-MM-DD format."
     ),
     source: Optional[str] = typer.Option(
         None, help="Restrict to source (telegram, x, web, rss)."
     ),
     limit: Optional[int] = typer.Option(
         None, help="Maximum number of posts to process."
+    ),
+    reprocess: bool = typer.Option(
+        False,
+        "--reprocess",
+        help="Force reprocessing even if LSS has already completed for a post.",
     ),
 ):
     """Select ingested posts and execute the LSS pipeline."""
@@ -39,11 +43,16 @@ def extract_callback(
     # Validate selector logic
     # -------------------------------------------------
 
-    selectors = [post_id is not None, alias is not None, publisher is not None]
-    if sum(selectors) != 1:
-        raise typer.BadParameter(
-            "Exactly one of --post-id, --alias, or --publisher must be provided."
-        )
+    if post_id is not None:
+        if any([alias, publisher, pub_date, source]):
+            raise typer.BadParameter(
+                "--post-id cannot be combined with other filters."
+            )
+    else:
+        if not any([alias, publisher, pub_date, source]):
+            raise typer.BadParameter(
+                "At least one of --date, --alias, --publisher, or --source must be provided."
+            )
 
     # -------------------------------------------------
     # DB helpers
@@ -55,14 +64,14 @@ def extract_callback(
         con.execute("PRAGMA foreign_keys = ON;")
         return con
 
-    def _parse_date_yyyymmdd(value: str) -> tuple[str, str]:
+    def _parse_date_iso(value: str) -> tuple[str, str]:
         try:
-            dt = datetime.strptime(value, "%Y%m%d")
+            d = date.fromisoformat(value)
         except ValueError:
-            raise typer.BadParameter("Date must be YYYYMMDD")
+            raise typer.BadParameter("Date must be YYYY-MM-DD")
 
-        start = dt.strftime("%Y-%m-%dT00:00:00Z")
-        end = dt.strftime("%Y-%m-%dT23:59:59Z")
+        start = f"{d.isoformat()}T00:00:00Z"
+        end = f"{d.isoformat()}T23:59:59Z"
         return start, end
 
     # -------------------------------------------------
@@ -88,8 +97,8 @@ def extract_callback(
         clauses.append("source = ?")
         params.append(source)
 
-    if date is not None:
-        start, end = _parse_date_yyyymmdd(date)
+    if pub_date is not None:
+        start, end = _parse_date_iso(pub_date)
         clauses.append("published_at BETWEEN ? AND ?")
         params.extend([start, end])
 
@@ -119,12 +128,19 @@ def extract_callback(
 
     posts = [{"id": row["id"], "text": row["text"]} for row in rows]
 
-    print(f"[green]Running LSS on {len(posts)} post(s)[/green]")
+    print(
+        f"[green]Running LSS on {len(posts)} post(s)"
+        + (" (reprocess enabled)" if reprocess else "")
+        + "[/green]"
+    )
 
     # -------------------------------------------------
     # Run LSS
     # -------------------------------------------------
 
-    run_lss_pipeline(posts)
+    run_lss_pipeline(
+        posts,
+        reprocess=reprocess,
+    )
 
     print("[bold green]LSS extraction complete.[/bold green]")

@@ -126,6 +126,21 @@ def _compute_doc_span(raw_match: dict[str, Any]) -> tuple[int, int]:
 # ---------------------------------------------------------------------
 # EVENT MATCH CONSTRUCTION
 # ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+# Public span helper (pipeline-facing)
+# ---------------------------------------------------------------------
+
+def compute_doc_span_from_raw_word_matches(
+    raw_match: dict[str, Any],
+) -> tuple[int, int]:
+    """
+    Public wrapper used by the LSS pipeline.
+
+    Returns:
+        (start_token, end_token) where end_token is exclusive.
+    """
+    return _compute_doc_span(raw_match)
+
 
 def build_event_match(
     *,

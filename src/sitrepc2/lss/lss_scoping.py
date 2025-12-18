@@ -1,11 +1,10 @@
 # src/sitrepc2/lss/lss_scoping.py
-
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import List
 
-from spacy.tokens import Doc
+from spacy.tokens import Doc, Span
 
 from sitrepc2.lss.typedefs import EventMatch, WordMatch
 
@@ -37,13 +36,25 @@ class LSSRoleCandidate:
 @dataclass(frozen=True, slots=True)
 class LSSContextSpan:
     """
-    Contextual span detected by LSS that is not bound to a specific role.
+    Contextual span detected by LSS that is not bound to a specific event.
     """
-    ctx_kind: str                  # REGION / GROUP / DIRECTION / PROXIMITY
+    ctx_kind: str                  # LOCATION / REGION / GROUP / DIRECTION
     text: str
 
-    start_token: int | None
-    end_token: int | None
+    start_token: int
+    end_token: int
+
+
+# ---------------------------------------------------------------------
+# Canonical gazetteer-backed entity labels
+# ---------------------------------------------------------------------
+
+CUSTOM_ENTITY_LABELS = {
+    "LOCATION",
+    "REGION",
+    "GROUP",
+    "DIRECTION",
+}
 
 
 # ---------------------------------------------------------------------
@@ -58,12 +69,13 @@ def lss_scope_event(
     """
     Perform LSS scoping for a single event.
 
-    Returns:
-        role_candidates: unresolved ACTOR / ACTION / LOCATION candidates
-        context_spans:   unbound contextual spans
-    """
+    Responsibilities:
+    - Extract role candidates from Holmes WordMatches
+    - Extract context spans from gazetteer-backed entities only
 
-    span = doc[event.doc_start_token_index : event.doc_end_token_index]
+    No semantic inference is performed here.
+    """
+    event_span = doc[event.doc_start_token_index : event.doc_end_token_index]
 
     role_candidates: list[LSSRoleCandidate] = []
     context_spans: list[LSSContextSpan] = []
@@ -92,19 +104,19 @@ def lss_scope_event(
         )
 
     # -------------------------------------------------
-    # Context spans from spaCy entity ruler
+    # Context spans from gazetteer-backed entities only
     # -------------------------------------------------
 
     for ent in doc.ents:
-        if ent.start < span.start or ent.end > span.end:
+        # Only consider canonical gazetteer entities
+        if ent.label_ not in CUSTOM_ENTITY_LABELS:
             continue
 
-        if ent.label_ not in {
-            "REGION",
-            "GROUP",
-            "DIRECTION",
-            "PROXIMITY",
-        }:
+        # Only consider entities overlapping the event span
+        if not _spans_overlap(
+            ent.start, ent.end,
+            event_span.start, event_span.end,
+        ):
             continue
 
         context_spans.append(
@@ -120,6 +132,22 @@ def lss_scope_event(
 
 
 # ---------------------------------------------------------------------
+# Helper functions
+# ---------------------------------------------------------------------
+
+def _spans_overlap(
+    start1: int,
+    end1: int,
+    start2: int,
+    end2: int,
+) -> bool:
+    """
+    Check whether two token spans overlap.
+    """
+    return not (end1 <= start2 or end2 <= start1)
+
+
+# ---------------------------------------------------------------------
 # Role inference helpers (structural only)
 # ---------------------------------------------------------------------
 
@@ -127,20 +155,24 @@ def _infer_role_kind_from_word_match(wm: WordMatch) -> str | None:
     """
     Infer a coarse role kind from a WordMatch.
 
-    This is *structural inference only* and may over-generate.
+    Structural inference only.
     DOM is responsible for validation and resolution.
     """
-
     mt = (wm.match_type or "").lower()
 
-    if "actor" in mt or "subject" in mt:
+    # Actor-like grammatical roles
+    if mt in {"subject", "actor", "object", "dobj", "possessor"}:
         return "ACTOR"
 
-    if "action" in mt or "verb" in mt:
+    # Action-like roles
+    if mt in {"verb", "action"}:
         return "ACTION"
 
-    # Heuristic fallback: extracted span differs from surface word
-    if wm.extracted_word and wm.extracted_word.lower() != wm.document_word.lower():
+    # Fallback: Holmes extracted a different surface form
+    if (
+        wm.extracted_word
+        and wm.extracted_word.lower() != wm.document_word.lower()
+    ):
         return "LOCATION"
 
     return None

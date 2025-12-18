@@ -12,7 +12,7 @@ from importlib.resources import files
 # ---------------------------------------------------------------------------
 
 DOTDIR_NAME = ".sitrepc2"
-SEED_DB_NAME = "sitrepc2_seed.db"
+SEED_DB_NAME = "gazetteer_seed.db"
 
 def find_repo_root(start: Optional[Path] = None) -> Path:
     """
@@ -44,14 +44,14 @@ def dot_path(root: Path, path: str | Path) -> Path:
 # 2a. Database paths (new primary persistence layer)
 # ---------------------------------------------------------------------------
 
-DB_NAME = "sitrepc2.db"
+DB_NAME = "gazetteer.db"
 
 def db_path(root: Path) -> Path:
     """Return the SQLite database path inside `.sitrepc2/`."""
     return dot_path(root, DB_NAME)
 
 
-def current_db_path() -> Path:
+def get_gazetteer_db_path() -> Path:
     """Convenience wrapper: SQLite database for the current project."""
     return db_path(find_repo_root())
 
@@ -83,15 +83,15 @@ def current_records_db_path() -> Path:
 # ---------------------------------------------------------------------------
 
 LEX_JSON = "war_lexicon.json"
-TGM_SOURCES = "tg_channels.jsonl"
+SOURCES = "sources.jsonl"
 
 
 def lexicon_path(root: Path) -> Path:
     return dot_path(root, LEX_JSON)
 
 
-def tg_channels_path(root: Path) -> Path:
-    return dot_path(root, TGM_SOURCES)
+def sources_path(root: Path) -> Path:
+    return dot_path(root, SOURCES)
 
 
 # ---------------------------------------------------------------------------
@@ -177,4 +177,4 @@ def schema_root() -> Path:
     Directory containing packaged SQL schemas
     (ingest.sql, lss.sql, dom.sql, etc.)
     """
-    return Path(files("sitrepc2") / "schemas")
+    return Path(files("sitrepc2") / "schema")

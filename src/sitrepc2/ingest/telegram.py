@@ -7,7 +7,6 @@ import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, date, time, timezone, timedelta
-from pathlib import Path
 from typing import AsyncIterator, Optional, List
 
 from dotenv import load_dotenv
@@ -15,20 +14,28 @@ from telethon import TelegramClient
 from telethon.errors import RPCError
 from telethon.tl import types
 
+from sitrepc2.config.paths import (
+    current_root,
+    current_dotpath,
+    records_db_path,
+    sources_path,
+)
+
 UTC = timezone.utc
 logger = logging.getLogger(__name__)
 load_dotenv()
 
 # ---------------------------------------------------------------------------
-# Paths
+# Resolve workspace paths (ONCE, init must already have run)
 # ---------------------------------------------------------------------------
 
-DOTPATH = Path.home() / ".sitrepc2"
-SOURCES_FILE = DOTPATH / "sources.jsonl"
-DB_FILE = DOTPATH / "records.db"
+_ROOT = current_root()
+_DOTPATH = current_dotpath()
+_SOURCES_FILE = sources_path(_ROOT)
+_DB_FILE = records_db_path(_ROOT)
 
 # ---------------------------------------------------------------------------
-# Bootstrap data
+# Bootstrap data (runtime config only)
 # ---------------------------------------------------------------------------
 
 BOOTSTRAP_SOURCES = [
@@ -54,24 +61,24 @@ class ChannelConfig:
 # Utilities
 # ---------------------------------------------------------------------------
 
-def _ensure_dotpath() -> None:
-    DOTPATH.mkdir(parents=True, exist_ok=True)
-
-
 def _ensure_sources_file() -> None:
-    if SOURCES_FILE.exists():
+    """
+    Ensure sources.jsonl exists.
+    This is runtime configuration, not schema.
+    """
+    if _SOURCES_FILE.exists():
         return
 
-    with SOURCES_FILE.open("w", encoding="utf-8") as f:
+    with _SOURCES_FILE.open("w", encoding="utf-8") as f:
         for row in BOOTSTRAP_SOURCES:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
-    logger.info("Created default sources.jsonl at %s", SOURCES_FILE)
+    logger.info("Created default sources.jsonl at %s", _SOURCES_FILE)
 
 
 def _load_sources() -> List[ChannelConfig]:
     out: List[ChannelConfig] = []
-    with SOURCES_FILE.open("r", encoding="utf-8") as f:
+    with _SOURCES_FILE.open("r", encoding="utf-8") as f:
         for line in f:
             if not line.strip():
                 continue
@@ -82,31 +89,32 @@ def _load_sources() -> List[ChannelConfig]:
     return out
 
 
-def _ensure_db() -> None:
-    if DB_FILE.exists():
-        return
+def _require_records_db() -> None:
+    """
+    Ensure records.db exists and contains ingest_posts.
+    Fail fast if init has not been run.
+    """
+    if not _DB_FILE.exists():
+        raise RuntimeError(
+            f"records.db not found at {_DB_FILE}. "
+            "Run `sitrepc2 init` first."
+        )
 
-    conn = sqlite3.connect(DB_FILE)
-    conn.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS ingest_posts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            source TEXT NOT NULL,
-            publisher TEXT NOT NULL,
-            source_post_id TEXT NOT NULL,
-            alias TEXT NOT NULL,
-            lang TEXT NOT NULL,
-            published_at TEXT NOT NULL,
-            fetched_at TEXT NOT NULL,
-            text TEXT NOT NULL,
-            UNIQUE (source, publisher, source_post_id)
-        );
-        """
-    )
-    conn.commit()
-    conn.close()
+    with sqlite3.connect(_DB_FILE) as conn:
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type='table' AND name='ingest_posts'
+            """
+        ).fetchone()
 
-    logger.info("Created records.db with ingest_posts table")
+        if row is None:
+            raise RuntimeError(
+                "ingest_posts table not found in records.db. "
+                "Workspace schema is incomplete. "
+                "Run `sitrepc2 init --reconfigure`."
+            )
 
 
 def _load_telegram_credentials() -> tuple[int, str, str]:
@@ -166,36 +174,39 @@ async def _fetch_async(
     aliases: Optional[List[str]],
 ) -> int:
 
-    _ensure_dotpath()
     _ensure_sources_file()
-    _ensure_db()
+    _require_records_db()
 
     api_id, api_hash, session_name = _load_telegram_credentials()
     start_dt, end_dt = _parse_date_range(start_date, end_date)
 
     channels = [
         c for c in _load_sources()
-        if c.active and (aliases is None or c.alias.lower() in {a.lower() for a in aliases})
+        if c.active and (aliases is None or c.channel_name.lower() in {a.lower() for a in aliases})
     ]
 
+    if not channels:
+        logger.warning("No active Telegram sources matched fetch criteria")
+        return 0
+
     inserted = 0
-    conn = sqlite3.connect(DB_FILE)
 
     async with TelegramClient(session_name, api_id, api_hash) as client:
-        for cfg in channels:
-            try:
-                entity = await client.get_entity(cfg.channel_name)
-            except RPCError as e:
-                logger.warning("Skipping %s: %s", cfg.channel_name, e)
-                continue
+        with sqlite3.connect(_DB_FILE) as conn:
 
-            async for msg in _iter_messages(client, entity, start_dt, end_dt):
-                text = (msg.message or "").strip()
-                if not text:
+            for cfg in channels:
+                try:
+                    entity = await client.get_entity(cfg.channel_name)
+                except RPCError as e:
+                    logger.warning("Skipping %s: %s", cfg.channel_name, e)
                     continue
 
-                try:
-                    conn.execute(
+                async for msg in _iter_messages(client, entity, start_dt, end_dt):
+                    text = (msg.message or "").strip()
+                    if not text:
+                        continue
+
+                    cur = conn.execute(
                         """
                         INSERT OR IGNORE INTO ingest_posts
                         (source, publisher, source_post_id,
@@ -213,13 +224,12 @@ async def _fetch_async(
                             text,
                         ),
                     )
-                    if conn.total_changes:
-                        inserted += 1
-                except sqlite3.Error as e:
-                    logger.error("DB error: %s", e)
 
-    conn.commit()
-    conn.close()
+                    if cur.rowcount == 1:
+                        inserted += 1
+
+            conn.commit()
+
     return inserted
 
 
