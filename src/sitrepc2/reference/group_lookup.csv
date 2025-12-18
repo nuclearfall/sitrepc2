@@ -1,7 +1,0 @@
-name,group_id,aliases,regions,neighbors
-vostok group of forces,1,"vostok group of forces;vostok grouping of forces;vostok group;east group of forces;east grouping of forces","dnipropetrovsk oblast;donetsk oblast;zaporizhzhia oblast","yug group of forces;dnepr group of forces"
-dnepr group of forces,2,"dnepr group of forces;dnepr grouping of forces;dnepr group;dnipro group of forces;dnipro grouping of forces;dnipro group","kherson oblast;zaporizhzhia oblast","vostok group of forces"
-sever group of forces,3,"sever group of forces;sever grouping of forces;sever group;north group of forces;north grouping of forces","kharkiv oblast;sumy oblast","zapad group of forces"
-zapad group of forces,4,"zapad group of forces;zapad grouping of forces;zapad group;west group of forces;west grouping of forces","donetsk oblast;kharkiv oblast;luhansk oblast","sever group of forces;tsentr group of forces"
-tsentr group of forces,5,"tsentr group of forces;tsentr grouping of forces;tsentr group;center group of forces;center grouping of forces;centre group of forces;centre grouping of forces","dnipropetrovsk oblast;donetsk oblast","zapad group of forces;yug group of forces"
-yug group of forces,6,"yug group of forces;yug grouping of forces;yug group;south group of forces;south grouping of forces","donetsk oblast","tsentr group of forces;vostok group of forces"
