@@ -9,7 +9,7 @@ from .paths import (
     dot_path,
     db_path,
     get_gazetteer_db_path,
-    get_records_db_path,
+    records_db_path,
     lexicon_path,
     sources_path,
     reference_root,

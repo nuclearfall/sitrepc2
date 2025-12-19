@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Optional
 
-from sitrepc2.config.paths import get_records_db_path
+from sitrepc2.config.paths import records_path as records_db_path
 
 UTC = timezone.utc
 
@@ -22,7 +22,7 @@ def _utc_now_iso() -> str:
 
 @contextmanager
 def _connection() -> sqlite3.Connection:
-    con = sqlite3.connect(get_records_db_path())
+    con = sqlite3.connect(records_db_path())
     try:
         con.execute("PRAGMA foreign_keys = ON;")
         yield con

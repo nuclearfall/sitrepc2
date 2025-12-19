@@ -3,21 +3,39 @@ from __future__ import annotations
 
 from importlib.resources import files
 from pathlib import Path
-from typing import Optional, Tuple
-from importlib.resources import files
-
+from typing import Optional
 
 # ---------------------------------------------------------------------------
-# 1. Detect project root (git-style)
+# Constants
 # ---------------------------------------------------------------------------
 
 DOTDIR_NAME = ".sitrepc2"
-SEED_DB_NAME = "gazetteer_seed.db"
+SOURCE_DIR = "sitrepc2"
+
+# Seed filenames (packaged)
+SEED_GAZETTEER_DB = "seed_gazetteer.db"
+SEED_LEXICON = "seed_lexicon.json"
+SEED_SOURCES = "seed_sources.jsonl"
+
+# Workspace filenames
+GAZETTEER_DB = "gazetteer.db"
+RECORDS_DB = "records.db"
+LEXICON = "war_lexicon.json"
+SOURCES = "sources.jsonl"
+
+# Schema filenames
+REC_SCHEMA_INGEST = "ingest.sql"
+REC_SCHEMA_LSS = "lss.sql"
+GAZ_SCHEMA_GAZETTEER = "gazetteer.sql"
+
+# ---------------------------------------------------------------------------
+# Repo / workspace discovery
+# ---------------------------------------------------------------------------
 
 def find_repo_root(start: Optional[Path] = None) -> Path:
     """
     Locate the project root by walking upward until a `.sitrepc2/` directory
-    is found. This matches the original sitrepc2 workspace initialization model.
+    is found. Used ONLY after initialization.
     """
     start = start or Path.cwd()
     p = start.resolve()
@@ -31,150 +49,68 @@ def find_repo_root(start: Optional[Path] = None) -> Path:
         "Run `sitrepc2 init` first."
     )
 
-
-def get_dotpath(root: Path) -> Path:
-    return root / DOTDIR_NAME
-
-
-def dot_path(root: Path, path: str | Path) -> Path:
-    return get_dotpath(root) / path
-
-
-# ---------------------------------------------------------------------------
-# 2a. Database paths (new primary persistence layer)
-# ---------------------------------------------------------------------------
-
-DB_NAME = "gazetteer.db"
-
-def db_path(root: Path) -> Path:
-    """Return the SQLite database path inside `.sitrepc2/`."""
-    return dot_path(root, DB_NAME)
-
-
-def get_gazetteer_db_path() -> Path:
-    """Convenience wrapper: SQLite database for the current project."""
-    return db_path(find_repo_root())
-
-def seed_db_path() -> Path:
-    return Path(files("sitrepc2") / "reference" / SEED_DB_NAME)
-
-def get_records_db_path() -> Path:
-    return current_records_db_path()
-
-# ---------------------------------------------------------------------------
-# 2b. Records database (authoritative pipeline persistence)
-# ---------------------------------------------------------------------------
-
-RECORDS_DB_NAME = "records.db"
-
-def records_db_path(root: Path) -> Path:
-    """Authoritative records database (ingest, LSS, DOM, review)."""
-    return dot_path(root, RECORDS_DB_NAME)
-
-
-def current_records_db_path() -> Path:
-    """Convenience wrapper for records.db in the current workspace."""
-    return records_db_path(find_repo_root())
-
-
-
-# ---------------------------------------------------------------------------
-# 3. Workspace paths still relevant (lexicon, tg sources)
-# ---------------------------------------------------------------------------
-
-LEX_JSON = "war_lexicon.json"
-SOURCES = "sources.jsonl"
-
-
-def lexicon_path(root: Path) -> Path:
-    return dot_path(root, LEX_JSON)
-
-
-def sources_path(root: Path) -> Path:
-    return dot_path(root, SOURCES)
-
-
-# ---------------------------------------------------------------------------
-# 4. Canonical reference files (still used for seeding DB)
-# ---------------------------------------------------------------------------
-
-def reference_root() -> Path:
-    """Directory containing canonical reference data inside the package."""
-    return Path(files("sitrepc2") / "reference")
-
-
-def ref_path(path: str | Path) -> Path:
-    return reference_root() / path
-
-
-# -- Canonical CSVs (optional, used mostly for import scripts) --
-
-GAZ_LOCALE = "locale_lookup.csv"
-GAZ_REGION = "region_lookup.csv"
-GAZ_GROUPS = "group_lookup.csv"
-GAZ_DIRECTIONS = "direction_lookup.csv"
-
-# Retain these ONLY as source materials for DB seeding
-GAZ_PATHS = (GAZ_LOCALE, GAZ_REGION, GAZ_GROUPS, GAZ_DIRECTIONS)
-
-
-def source_gazetteer_paths() -> Tuple[Path, Path, Path]:
-    """Return the canonical CSV paths *shipped with the package*."""
-    return tuple(ref_path(gaz) for gaz in GAZ_PATHS)
-
-
-def source_op_groups_path() -> Path:
-    return ref_path(GAZ_GROUPS)
-
-
-def source_tg_channels_path() -> Path:
-    return ref_path(TGM_SOURCES)
-
-
-def source_lexicon_path() -> Path:
-    return ref_path(LEX_JSON)
-
-
-# ---------------------------------------------------------------------------
-# 5. Current workspace discovery helpers
-# ---------------------------------------------------------------------------
-
-def current_root() -> Path:
-    return find_repo_root()
-
-
-def current_dotpath() -> Path:
-    return get_dotpath(current_root())
-
-
-# This previously surfaced CSV workspace copies — now removed.
-# SQLite is the primary persistence layer, so CSV material does not appear here.
-#
-# def current_gazetteer() -> Tuple[Path, ...]:
-#     return tuple(current_dotpath() / gaz for gaz in GAZ_PATHS)
-def source_region_lookup_path() -> Path:
-    return ref_path(GAZ_REGION)
-
-
-def source_group_lookup_path() -> Path:
-    return ref_path(GAZ_GROUPS)
-
-
-def source_locale_lookup_path() -> Path:
-    return ref_path(GAZ_LOCALE)
-
-
-def source_direction_lookup_path() -> Path:
-    return ref_path(GAZ_DIRECTIONS)
-
-
-# ---------------------------------------------------------------------------
-# 4b. Packaged SQL schemas (records DB initialization)
-# ---------------------------------------------------------------------------
-
-def schema_root() -> Path:
+def dot_path(root: Optional[Path] = None) -> Path:
     """
-    Directory containing packaged SQL schemas
-    (ingest.sql, lss.sql, dom.sql, etc.)
+    Return the workspace path. During init, `root` must be supplied.
     """
-    return Path(files("sitrepc2") / "schema")
+    if root is not None:
+        return root / DOTDIR_NAME
+    return find_repo_root() / DOTDIR_NAME
+
+# ---------------------------------------------------------------------------
+# Packaged reference paths
+# ---------------------------------------------------------------------------
+
+def seed_reference_path() -> Path:
+    return Path(files(SOURCE_DIR) / "reference")
+
+def schema_root_path() -> Path:
+    return Path(files(SOURCE_DIR) / "schema")
+
+def rec_schema_root_path() -> Path:
+    return schema_root_path() / "records"
+
+def gaz_schema_root_path() -> Path:
+    return schema_root_path() / "gazetteer"
+
+# ---------------------------------------------------------------------------
+# Seed files
+# ---------------------------------------------------------------------------
+
+def seed_lexicon_path() -> Path:
+    return seed_reference_path() / SEED_LEXICON
+
+def seed_sources_path() -> Path:
+    return seed_reference_path() / SEED_SOURCES
+
+def seed_gazetteer_path() -> Path:
+    return seed_reference_path() / SEED_GAZETTEER_DB
+
+# ---------------------------------------------------------------------------
+# Workspace files
+# ---------------------------------------------------------------------------
+
+def gazetteer_path(root: Optional[Path] = None) -> Path:
+    return dot_path(root) / GAZETTEER_DB
+
+def records_path(root: Optional[Path] = None) -> Path:
+    return dot_path(root) / RECORDS_DB
+
+def lexicon_path(root: Optional[Path] = None) -> Path:
+    return dot_path(root) / LEXICON
+
+def sources_path(root: Optional[Path] = None) -> Path:
+    return dot_path(root) / SOURCES
+
+# ---------------------------------------------------------------------------
+# Schema files
+# ---------------------------------------------------------------------------
+
+def ingest_schema_path() -> Path:
+    return rec_schema_root_path() / REC_SCHEMA_INGEST
+
+def lss_schema_path() -> Path:
+    return rec_schema_root_path() / REC_SCHEMA_LSS
+
+def gazetteer_schema_path() -> Path:
+    return gaz_schema_root_path() / GAZ_SCHEMA_GAZETTEER

@@ -8,7 +8,7 @@ from rich.table import Table
 
 from sitrepc2.config.paths import (
     get_gazetteer_db_path,
-    get_records_db_path
+    records_db_path
 )
 
 

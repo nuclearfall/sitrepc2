@@ -7,7 +7,7 @@ from typing import Optional, List
 import typer
 from rich import print
 
-from sitrepc2.config.paths import get_records_db_path
+from sitrepc2.config.paths import records_db_path
 from sitrepc2.lss.pipeline import run_lss_pipeline
 
 
@@ -59,7 +59,7 @@ def extract_callback(
     # -------------------------------------------------
 
     def _conn() -> sqlite3.Connection:
-        con = sqlite3.connect(get_records_db_path())
+        con = sqlite3.connect(records_db_path())
         con.row_factory = sqlite3.Row
         con.execute("PRAGMA foreign_keys = ON;")
         return con

@@ -8,7 +8,7 @@ from typing import Dict, Iterable, List
 from spacy.language import Language
 from spacy.pipeline import EntityRuler
 
-from sitrepc2.config.paths import get_gazetteer_db_path
+from sitrepc2.config.paths import gazetteer_path as gazetteer_db_path
 
 # ---------------------------------------------------------------------------
 # DB helpers

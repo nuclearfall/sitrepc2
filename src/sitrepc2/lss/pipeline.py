@@ -9,7 +9,7 @@ import sqlite3
 from spacy.tokens import Doc
 from holmes_extractor import Manager
 
-from sitrepc2.config.paths import get_records_db_path
+from sitrepc2.config.paths import records_path as records_db_path
 from sitrepc2.lss.bootstrap import build_manager
 from sitrepc2.lss.phrases import register_search_phrases
 from sitrepc2.lss.ruler import add_entity_rulers_from_db
@@ -91,7 +91,7 @@ def run_lss_pipeline(
     if not reprocess:
         ingest_ids = [p["id"] for p in ingest_posts]
 
-        with sqlite3.connect(get_records_db_path()) as con:
+        with sqlite3.connect(records_db_path()) as con:
             con.execute("PRAGMA foreign_keys = ON;")
             rows = con.execute(
                 f"""

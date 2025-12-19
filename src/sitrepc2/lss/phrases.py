@@ -5,15 +5,12 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from sitrepc2.config.paths import source_lexicon_path, lexicon_path
+from sitrepc2.config.paths import lexicon_path as lexicon_db_path
 
 
 def load_war_lexicon() -> dict[str, Any]:
     import json
-    try:
-        path = lexicon_path()
-    except:
-        path = source_lexicon_path()
+    path = lexicon_db_path()
     if not path or not path.exists():
          raise FileNotFoundError(f"Unable to locate the war_lexicon.json. Have you run 'sitrepc2 init'?") 
     with path.open("r", encoding="utf8") as f:
