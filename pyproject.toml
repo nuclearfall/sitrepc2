@@ -9,38 +9,67 @@ description = "Automated event and location extraction pipeline for war reportin
 requires-python = ">=3.10,<3.12"
 
 dependencies = [
+    # --- Core scientific / NLP stack ---
     "numpy>=1.21,<1.25",
     "spacy>=3.5.0,<3.6",
     "holmes-extractor",
     "coreferee",
     "python-dotenv",
+
+    # --- CLI / UX ---
+    "typer>=0.7,<0.8.0",      # spaCy compatible
+    "click>=8.0,<8.2",
+    "rich",
+
+    # --- Geo / spatial ---
     "shapely",
     "pyproj",
-    "typer>=0.7,<0.8.0",      # ✅ compatible with spaCy 3.5.x
-    "click>=8.0,<8.2",        # ✅ avoids the make_metavar bug
-    "telethon",
     "pandas>=2.1,<2.2",
-    "overpy>=0.6",
     "geopandas>=1.1.0,<1.2.0",
-    "rich"
+    "overpy>=0.6",
+
+    # --- Telegram ingestion ---
+    "telethon",
+
+    # --- HTTP scraping ---
+    "requests>=2.28",
+    "beautifulsoup4>=4.12",
+    "lxml>=4.9",
+    "readability-lxml>=0.8.1",
+
+    # --- Facebook scraping ---
+    "facebook-scraper>=0.2.59",
+
+    # --- Translation (MarianMT) ---
+    "transformers>=4.36,<4.40",
+    "torch>=2.0,<2.3",
 ]
 
+# ----------------------------------------------------------------------
+# Unofficial / VCS dependencies
+# ----------------------------------------------------------------------
 
+[project.optional-dependencies]
+twitter = [
+    "twint @ git+https://github.com/twintproject/twint.git",
+]
 
+# ----------------------------------------------------------------------
+# CLI entry point
+# ----------------------------------------------------------------------
 
 [project.scripts]
 sitrepc2 = "sitrepc2.cli.app:app"
 
-
+# ----------------------------------------------------------------------
 # Hatch build configuration
+# ----------------------------------------------------------------------
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sitrepc2"]
 
 [tool.hatch.build.targets.sdist]
-include = [
-    "src",
-]
+include = ["src"]
 
 [tool.hatch.build]
 include = [

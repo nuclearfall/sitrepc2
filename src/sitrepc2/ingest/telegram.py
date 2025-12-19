@@ -15,9 +15,7 @@ from telethon.errors import RPCError
 from telethon.tl import types
 
 from sitrepc2.config.paths import (
-    current_root,
-    current_dotpath,
-    records_db_path,
+    records_path,
     sources_path,
 )
 
@@ -26,13 +24,11 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # ---------------------------------------------------------------------------
-# Resolve workspace paths (ONCE, init must already have run)
+# Resolve workspace paths (ONCE — requires `sitrepc2 init`)
 # ---------------------------------------------------------------------------
 
-_ROOT = current_root()
-_DOTPATH = current_dotpath()
-_SOURCES_FILE = sources_path(_ROOT)
-_DB_FILE = records_db_path(_ROOT)
+_SOURCES_FILE = sources_path()
+_DB_FILE = records_path()
 
 # ---------------------------------------------------------------------------
 # Bootstrap data (runtime config only)
@@ -64,10 +60,12 @@ class ChannelConfig:
 def _ensure_sources_file() -> None:
     """
     Ensure sources.jsonl exists.
-    This is runtime configuration, not schema.
+    Runtime configuration only — not schema.
     """
     if _SOURCES_FILE.exists():
         return
+
+    _SOURCES_FILE.parent.mkdir(parents=True, exist_ok=True)
 
     with _SOURCES_FILE.open("w", encoding="utf-8") as f:
         for row in BOOTSTRAP_SOURCES:
@@ -180,9 +178,11 @@ async def _fetch_async(
     api_id, api_hash, session_name = _load_telegram_credentials()
     start_dt, end_dt = _parse_date_range(start_date, end_date)
 
+    alias_filter = {a.lower() for a in aliases} if aliases else None
+
     channels = [
         c for c in _load_sources()
-        if c.active and (aliases is None or c.channel_name.lower() in {a.lower() for a in aliases})
+        if c.active and (alias_filter is None or c.channel_name.lower() in alias_filter)
     ]
 
     if not channels:
