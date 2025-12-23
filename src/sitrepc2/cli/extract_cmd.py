@@ -7,7 +7,7 @@ from typing import Optional, List
 import typer
 from rich import print
 
-from sitrepc2.config.paths import records_db_path
+from sitrepc2.config.paths import records_path as records_db_path
 from sitrepc2.lss.pipeline import run_lss_pipeline
 
 

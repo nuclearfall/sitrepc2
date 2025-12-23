@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sitrepc2"
-version = "0.1.0"
+version = "0.2.0"
 description = "Automated event and location extraction pipeline for war reporting."
 requires-python = ">=3.10,<3.12"
 
@@ -40,18 +40,16 @@ dependencies = [
     # --- Facebook scraping ---
     "facebook-scraper>=0.2.59",
 
+    # --- Twitter/X scraping
+    "twint @ git+https://github.com/twintproject/twint.git",
+
     # --- Translation (MarianMT) ---
     "transformers>=4.36,<4.40",
     "torch>=2.0,<2.3",
-]
 
-# ----------------------------------------------------------------------
-# Unofficial / VCS dependencies
-# ----------------------------------------------------------------------
+    # --- GUI (PySide6) ---
+    "pyside6"
 
-[project.optional-dependencies]
-twitter = [
-    "twint @ git+https://github.com/twintproject/twint.git",
 ]
 
 # ----------------------------------------------------------------------
@@ -59,7 +57,8 @@ twitter = [
 # ----------------------------------------------------------------------
 
 [project.scripts]
-sitrepc2 = "sitrepc2.cli.app:app"
+sitrepc2-cli = "sitrepc2.cli.app:app"
+sitrepc2-gui = "sitrepc2.gui.main:main"
 
 # ----------------------------------------------------------------------
 # Hatch build configuration

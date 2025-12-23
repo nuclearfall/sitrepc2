@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 
 # ---------------------------------------------------------------------
@@ -17,9 +17,12 @@ class LSSSection:
     Pure structural section emitted by LSS sectioning.
 
     Identity is assigned only at persistence time.
+    Token alignment is resolved downstream.
     """
     ordinal: int
     text: str
+    start_char: int
+    end_char: int
 
 
 # ---------------------------------------------------------------------
@@ -43,28 +46,25 @@ SECTION_HEADING_RE = re.compile(
 
 def split_into_sections(post_text: str) -> List[LSSSection]:
     """
-    Deterministically split a post into ordered sections.
+    Deterministically split a post into ordered structural sections.
 
-    Rules (in order):
-      1. Heading-like lines start new sections
-      2. Blank-line separation is preserved
-      3. Long sections may be split by paragraph blocks
-
-    This function is PURE:
+    PURE structural logic:
       - no NLP
       - no semantics
       - no persistence
     """
 
-    lines = post_text.splitlines()
-    sections: list[list[str]] = []
-    current: list[str] = []
+    lines = post_text.splitlines(keepends=True)
 
-    def flush():
-        nonlocal current
-        if current:
-            sections.append(current)
-            current = []
+    sections: list[tuple[int, int]] = []
+    current_start: Optional[int] = None
+    cursor = 0
+
+    def flush(end: int):
+        nonlocal current_start
+        if current_start is not None and end > current_start:
+            sections.append((current_start, end))
+            current_start = None
 
     # -------------------------------------------------
     # Pass 1: heading-based splitting
@@ -74,40 +74,53 @@ def split_into_sections(post_text: str) -> List[LSSSection]:
         stripped = line.strip()
 
         if stripped and SECTION_HEADING_RE.match(stripped):
-            flush()
-            current.append(line)
-        else:
-            current.append(line)
+            flush(cursor)
+            current_start = cursor
+        elif current_start is None:
+            current_start = cursor
 
-    flush()
+        cursor += len(line)
+
+    flush(cursor)
 
     # -------------------------------------------------
     # Pass 2: paragraph fallback for very long sections
     # -------------------------------------------------
 
-    final_text_blocks: list[str] = []
+    final_spans: list[tuple[int, int]] = []
 
-    for block in sections:
-        text = "\n".join(block).strip()
+    for start, end in sections:
+        block_text = post_text[start:end]
 
-        if len(text) > 800 and "\n\n" in text:
-            paragraphs = [
-                p.strip() for p in text.split("\n\n") if p.strip()
-            ]
-            final_text_blocks.extend(paragraphs)
+        if len(block_text) > 800 and "\n\n" in block_text:
+            rel_cursor = 0
+            for para in block_text.split("\n\n"):
+                para = para.strip()
+                if not para:
+                    continue
+                para_start = block_text.find(para, rel_cursor)
+                if para_start == -1:
+                    continue
+                abs_start = start + para_start
+                abs_end = abs_start + len(para)
+                final_spans.append((abs_start, abs_end))
+                rel_cursor = para_start + len(para)
         else:
-            final_text_blocks.append(text)
+            final_spans.append((start, end))
 
     # -------------------------------------------------
     # Emit ordered sections
     # -------------------------------------------------
 
     out: list[LSSSection] = []
-    for idx, text in enumerate(final_text_blocks):
+
+    for idx, (start, end) in enumerate(final_spans):
         out.append(
             LSSSection(
                 ordinal=idx,
-                text=text,
+                text=post_text[start:end].strip(),
+                start_char=start,
+                end_char=end,
             )
         )
 

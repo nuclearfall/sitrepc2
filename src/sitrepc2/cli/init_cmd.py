@@ -104,7 +104,21 @@ def init(
     if ctx.invoked_subcommand is not None:
         return
 
-    root = Path.cwd()
+    init_workspace(reconfigure=reconfigure)
+
+
+def init_workspace(
+    *,
+    root: Path | None = None,
+    reconfigure: bool = False,
+) -> None:
+    """
+    Initialize a sitrepc2 workspace.
+
+    Safe to call multiple times.
+    Raises on failure.
+    """
+    root = root or Path.cwd()
     dot = dot_path(root)
 
     if reconfigure and dot.exists():
@@ -113,9 +127,9 @@ def init(
 
     dot.mkdir(parents=True, exist_ok=True)
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------
     # 1. Gazetteer DB
-    # ------------------------------------------------------------------
+    # --------------------------------------------------
     gz_dst = gazetteer_path(root)
     if gz_dst.exists():
         typer.secho(f"Gazetteer DB exists: {gz_dst}", fg=typer.colors.YELLOW)
@@ -126,14 +140,14 @@ def init(
         shutil.copy2(src, gz_dst)
         typer.secho("Copied gazetteer DB.", fg=typer.colors.GREEN)
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------
     # 2. Records DB
-    # ------------------------------------------------------------------
+    # --------------------------------------------------
     _init_records_db(root)
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------
     # 3. Reference files
-    # ------------------------------------------------------------------
+    # --------------------------------------------------
     if not lexicon_path(root).exists():
         shutil.copy2(seed_lexicon_path(), lexicon_path(root))
         typer.secho("Copied war_lexicon.json", fg=typer.colors.GREEN)
@@ -142,9 +156,9 @@ def init(
         shutil.copy2(seed_sources_path(), sources_path(root))
         typer.secho("Copied sources.jsonl", fg=typer.colors.GREEN)
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------
     # 4. NLP runtime
-    # ------------------------------------------------------------------
+    # --------------------------------------------------
     typer.secho("Checking NLP runtime…", fg=typer.colors.CYAN)
 
     try:

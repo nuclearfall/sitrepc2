@@ -56,7 +56,7 @@ class EventMatch:
       • used by LSS to extract spans
       • never stored directly
       • never mutated
-      • never passed beyond LSS
+      • never passed beyond LSS (except transiently through events.py)
 
     All persistence happens via derived tables.
     """

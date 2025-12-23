@@ -17,34 +17,19 @@ from sitrepc2.lss.sectioning import split_into_sections
 from sitrepc2.lss.events import (
     build_word_matches,
     compute_doc_span_from_raw_word_matches,
+    build_lss_events,
 )
-from sitrepc2.lss.lss_scoping import lss_scope_event
 from sitrepc2.lss.persist import (
-    persist_holmes_word_matches,
     create_lss_run,
     complete_lss_run,
     persist_section,
     persist_event,
     persist_role_candidate,
-    persist_context_span,
+    persist_location_series,
+    persist_context_hint,
 )
 from sitrepc2.lss.typedefs import EventMatch
-
-"""
-LSS PIPELINE
-
-Contract-stable, write-only execution layer.
-
-Responsibilities:
-- Run NLP + Holmes
-- Extract structural LSS artifacts
-- Persist unresolved outputs for DOM
-
-This pipeline MUST NOT:
-- interpret semantics
-- resolve locations or actors
-- apply heuristics
-"""
+from sitrepc2.lss.contextualize import contextualize
 
 
 # ---------------------------------------------------------------------
@@ -52,9 +37,6 @@ This pipeline MUST NOT:
 # ---------------------------------------------------------------------
 
 def build_holmes_and_nlp() -> Manager:
-    """
-    Build a Holmes Manager with gazetteer-backed EntityRuler installed.
-    """
     manager = build_manager()
     manager.nlp = add_entity_rulers_from_db(manager.nlp)
     register_search_phrases(manager)
@@ -62,7 +44,7 @@ def build_holmes_and_nlp() -> Manager:
 
 
 # ---------------------------------------------------------------------
-# LSS PIPELINE (WRITE-ONLY, DB-BACKED)
+# LSS PIPELINE
 # ---------------------------------------------------------------------
 
 def run_lss_pipeline(
@@ -73,14 +55,6 @@ def run_lss_pipeline(
     min_similarity: float = 0.0,
     reprocess: bool = False,
 ) -> None:
-    """
-    Execute the LSS layer and persist unresolved, reviewable outputs.
-
-    This function:
-      • returns nothing
-      • assumes no in-memory continuity
-      • writes ONLY LSS tables
-    """
     if not ingest_posts:
         return
 
@@ -118,12 +92,11 @@ def run_lss_pipeline(
 
     nlp = manager.nlp
 
-    post_ids = [p["id"] for p in ingest_posts]
-    texts = [p["text"] for p in ingest_posts]
-
     docs: dict[int, Doc] = {}
-
-    for pid, doc in zip(post_ids, nlp.pipe(texts, batch_size=batch_size)):
+    for pid, doc in zip(
+        (p["id"] for p in ingest_posts),
+        nlp.pipe((p["text"] for p in ingest_posts), batch_size=batch_size),
+    ):
         docs[pid] = doc
 
     manager.register_serialized_documents(
@@ -139,13 +112,12 @@ def run_lss_pipeline(
             matches_by_post[int(label)].append(m)
 
     # -------------------------------------------------------------
-    # Per-post LSS execution (retry-safe)
+    # Per-post execution
     # -------------------------------------------------------------
 
     for post in ingest_posts:
         ingest_post_id = post["id"]
         doc = docs.get(ingest_post_id)
-
         if doc is None:
             continue
 
@@ -155,29 +127,14 @@ def run_lss_pipeline(
             lss_run_id = create_lss_run(
                 ingest_post_id=ingest_post_id,
                 engine="holmes",
-                engine_version=None,
                 model=nlp.meta.get("name"),
             )
 
             # -------------------------
-            # Sections
+            # Build EventMatch objects
             # -------------------------
 
-            sections = split_into_sections(post["text"])
-            section_id_by_ordinal: dict[int, int] = {}
-
-            for sec in sections:
-                section_db_id = persist_section(
-                    lss_run_id=lss_run_id,
-                    ingest_post_id=ingest_post_id,
-                    text=sec.text,
-                    ordinal=sec.position,
-                )
-                section_id_by_ordinal[sec.position] = section_db_id
-
-            # -------------------------
-            # Events
-            # -------------------------
+            event_matches: list[EventMatch] = []
 
             for ordinal, raw in enumerate(matches_by_post.get(ingest_post_id, [])):
                 similarity = float(raw.get("overall_similarity_measure", 1.0))
@@ -186,24 +143,84 @@ def run_lss_pipeline(
 
                 start, end = compute_doc_span_from_raw_word_matches(raw)
                 text = raw.get("sentences_within_document") or doc[start:end].text
-                word_matches = build_word_matches(raw)
 
-                event = EventMatch(
-                    event_id=f"{ingest_post_id}:{ordinal}",
-                    post_id=str(ingest_post_id),
-                    label=raw.get("label", ""),
-                    search_phrase_text=raw.get("search_phrase_text", ""),
-                    sentences_within_document=text,
-                    overall_similarity=similarity,
-                    negated=bool(raw.get("negated", False)),
-                    uncertain=bool(raw.get("uncertain", False)),
-                    involves_coreference=bool(raw.get("involves_coreference", False)),
-                    doc_start_token_index=start,
-                    doc_end_token_index=end,
-                    word_matches=word_matches,
-                    raw_match=raw,
+                event_matches.append(
+                    EventMatch(
+                        event_id=f"{ingest_post_id}:{ordinal}",
+                        post_id=str(ingest_post_id),
+                        label=raw.get("label", ""),
+                        search_phrase_text=raw.get("search_phrase_text", ""),
+                        sentences_within_document=text,
+                        overall_similarity=similarity,
+                        negated=bool(raw.get("negated", False)),
+                        uncertain=bool(raw.get("uncertain", False)),
+                        involves_coreference=bool(raw.get("involves_coreference", False)),
+                        doc_start_token_index=start,
+                        doc_end_token_index=end,
+                        word_matches=build_word_matches(raw),
+                        raw_match=raw,
+                    )
                 )
 
+            # -------------------------
+            # Structural scoping + validation
+            # -------------------------
+
+            lss_events = build_lss_events(
+                doc=doc,
+                event_matches=event_matches,
+            )
+
+            # If the post produces no valid events → skip entirely
+            if not lss_events:
+                complete_lss_run(lss_run_id)
+                continue
+
+            # -------------------------
+            # Sections (persist ONLY if used)
+            # -------------------------
+
+            sections = split_into_sections(post["text"])
+            section_id_by_ordinal: dict[int, int] = {}
+
+            # Temporary assumption: all events in section 0
+            used_section_ordinals = {0}
+
+            for sec in sections:
+                if sec.ordinal not in used_section_ordinals:
+                    continue
+
+                section_id_by_ordinal[sec.ordinal] = persist_section(
+                    lss_run_id=lss_run_id,
+                    ingest_post_id=ingest_post_id,
+                    text=sec.text,
+                    ordinal=sec.ordinal,
+                )
+
+            # -------------------------
+            # Contextualization (MANDATORY)
+            # -------------------------
+
+            section_ordinals = sorted(section_id_by_ordinal.keys())
+            event_ordinals_by_section = {0: list(range(len(lss_events)))}
+
+            for idx, (event, roles, series_list, hints) in enumerate(lss_events):
+                lss_events[idx] = (
+                    event,
+                    roles,
+                    series_list,
+                    contextualize(
+                        context_hints=hints,
+                        section_ordinals=section_ordinals,
+                        event_ordinals_by_section=event_ordinals_by_section,
+                    ),
+                )
+
+            # -------------------------
+            # Persistence
+            # -------------------------
+
+            for ordinal, (event, roles, series_list, hints) in enumerate(lss_events):
                 section_id = section_id_by_ordinal.get(0)
 
                 lss_event_id = persist_event(
@@ -213,9 +230,9 @@ def run_lss_pipeline(
                     event_uid=event.event_id,
                     label=event.label,
                     search_phrase=event.search_phrase_text,
-                    text=text,
-                    start_token=start,
-                    end_token=end,
+                    text=event.sentences_within_document,
+                    start_token=event.doc_start_token_index,
+                    end_token=event.doc_end_token_index,
                     ordinal=ordinal,
                     similarity=event.overall_similarity,
                     negated=event.negated,
@@ -223,54 +240,29 @@ def run_lss_pipeline(
                     involves_coreference=event.involves_coreference,
                 )
 
-                # -------------------------
-                # Persist Holmes roles FIRST
-                # -------------------------
+                for rc in roles:
+                    persist_role_candidate(lss_event_id=lss_event_id, rc=rc)
 
-                persist_holmes_word_matches(
-                    lss_event_id=lss_event_id,
-                    word_matches=word_matches,
-                )
+                series_id_map = {}
+                item_id_map = {}
 
-                # -------------------------
-                # LSS scoping (structural augmentation)
-                # -------------------------
-
-                role_candidates, context_spans = lss_scope_event(
-                    doc=doc,
-                    event=event,
-                )
-
-                # Persist role candidates directly (no zipping)
-                for rc in role_candidates:
-                    persist_role_candidate(
+                for series in series_list:
+                    mapping = persist_location_series(
                         lss_event_id=lss_event_id,
-                        role_kind=rc.role_kind,
-                        document_word=rc.text,
-                        document_phrase=None,
-                        start_token=rc.start_token,
-                        end_token=rc.end_token,
-                        match_type=None,
-                        negated=rc.negated,
-                        uncertain=rc.uncertain,
-                        involves_coreference=rc.involves_coreference,
-                        similarity=rc.similarity,
-                        explanation=rc.explanation,
+                        series=series,
                     )
+                    series_id_map[series.series_id] = list(mapping.values())[0]
+                    item_id_map.update(mapping)
 
-                # Persist context spans
-                for ctx in context_spans:
-                    persist_context_span(
+                for hint in hints:
+                    persist_context_hint(
                         lss_run_id=lss_run_id,
-                        ingest_post_id=ingest_post_id,
-                        ctx_kind=ctx.ctx_kind,
-                        text=ctx.text,
-                        start_token=ctx.start_token,
-                        end_token=ctx.end_token,
+                        hint=hint,
+                        series_id_map=series_id_map,
+                        item_id_map=item_id_map,
                     )
 
             complete_lss_run(lss_run_id)
 
         except Exception:
-            # Leave run incomplete for retry
             raise

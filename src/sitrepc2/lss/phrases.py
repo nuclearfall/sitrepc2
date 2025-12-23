@@ -1,9 +1,10 @@
-# src/sitrepc2/holmes/search_phrases.py
+# src/sitrepc2/lss/phrases.py
 from __future__ import annotations
 
 from collections.abc import Iterable
-from pathlib import Path
 from typing import Any
+
+import holmes_extractor as holmes
 
 from sitrepc2.config.paths import lexicon_path as lexicon_db_path
 
@@ -12,7 +13,9 @@ def load_war_lexicon() -> dict[str, Any]:
     import json
     path = lexicon_db_path()
     if not path or not path.exists():
-         raise FileNotFoundError(f"Unable to locate the war_lexicon.json. Have you run 'sitrepc2 init'?") 
+        raise FileNotFoundError(
+            "Unable to locate war_lexicon.json. Have you run 'sitrepc2 init'?"
+        )
     with path.open("r", encoding="utf8") as f:
         return json.load(f)
 
@@ -25,18 +28,25 @@ def _iter_triggers(values: Iterable[str]) -> Iterable[str]:
     seen: set[str] = set()
     for raw in values:
         trigger = _norm_trigger(raw)
-        if not trigger:
-            continue
-        if trigger in seen:
+        if not trigger or trigger in seen:
             continue
         seen.add(trigger)
         yield trigger
 
 
-def register_search_phrases(
-    manager: holmes.Manager,
-) -> None:
+def register_search_phrases(manager: holmes.Manager) -> None:
+    """
+    Register Holmes search phrases.
+
+    Contract:
+    - Emits EventMatch only
+    - No location logic
+    - No context logic
+    - No role inference
+    """
+
     lexicon = load_war_lexicon()
+
     actions = lexicon["actions"]
     outcomes = lexicon["outcomes"]
     casualties = lexicon.get("casualties", {})

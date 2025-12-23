@@ -14,31 +14,28 @@ from telethon import TelegramClient
 from telethon.errors import RPCError
 from telethon.tl import types
 
-from sitrepc2.config.paths import (
-    records_path,
-    sources_path,
-)
+from sitrepc2.config.paths import records_path, sources_path
 
 UTC = timezone.utc
 logger = logging.getLogger(__name__)
 load_dotenv()
 
 # ---------------------------------------------------------------------------
-# Resolve workspace paths (ONCE — requires `sitrepc2 init`)
+# Resolve workspace paths
 # ---------------------------------------------------------------------------
 
 _SOURCES_FILE = sources_path()
 _DB_FILE = records_path()
 
 # ---------------------------------------------------------------------------
-# Bootstrap data (runtime config only)
+# Bootstrap data
 # ---------------------------------------------------------------------------
 
 BOOTSTRAP_SOURCES = [
-    {"channel_name": "mod_russia_en", "alias": "Russia", "channel_lang": "en", "active": True, "source_kind": "TELEGRAM"},
-    {"channel_name": "GeneralStaffZSU", "alias": "Ukraine", "channel_lang": "uk", "active": True, "source_kind": "TELEGRAM"},
-    {"channel_name": "deepstatemap", "alias": "DeepState", "channel_lang": "uk", "active": False, "source_kind": "TELEGRAM"},
-    {"channel_name": "rybar_in_english", "alias": "Rybar", "channel_lang": "ru", "active": False, "source_kind": "TELEGRAM"},
+    {"source_name": "mod_russia_en", "alias": "Russia", "source_lang": "en", "active": True, "source_kind": "TELEGRAM"},
+    {"source_name": "GeneralStaffZSU", "alias": "Ukraine", "source_lang": "uk", "active": True, "source_kind": "TELEGRAM"},
+    {"source_name": "deepstatemap", "alias": "DeepState", "source_lang": "uk", "active": False, "source_kind": "TELEGRAM"},
+    {"source_name": "rybar_in_english", "alias": "Rybar", "source_lang": "ru", "active": False, "source_kind": "TELEGRAM"},
 ]
 
 # ---------------------------------------------------------------------------
@@ -46,10 +43,10 @@ BOOTSTRAP_SOURCES = [
 # ---------------------------------------------------------------------------
 
 @dataclass
-class ChannelConfig:
-    channel_name: str
+class SourceConfig:
+    source_name: str
     alias: str
-    channel_lang: str
+    source_lang: str
     active: bool
     source_kind: str
 
@@ -58,15 +55,10 @@ class ChannelConfig:
 # ---------------------------------------------------------------------------
 
 def _ensure_sources_file() -> None:
-    """
-    Ensure sources.jsonl exists.
-    Runtime configuration only — not schema.
-    """
     if _SOURCES_FILE.exists():
         return
 
     _SOURCES_FILE.parent.mkdir(parents=True, exist_ok=True)
-
     with _SOURCES_FILE.open("w", encoding="utf-8") as f:
         for row in BOOTSTRAP_SOURCES:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -74,8 +66,8 @@ def _ensure_sources_file() -> None:
     logger.info("Created default sources.jsonl at %s", _SOURCES_FILE)
 
 
-def _load_sources() -> List[ChannelConfig]:
-    out: List[ChannelConfig] = []
+def _load_sources() -> List[SourceConfig]:
+    out: List[SourceConfig] = []
     with _SOURCES_FILE.open("r", encoding="utf-8") as f:
         for line in f:
             if not line.strip():
@@ -83,34 +75,23 @@ def _load_sources() -> List[ChannelConfig]:
             data = json.loads(line)
             if data.get("source_kind") != "TELEGRAM":
                 continue
-            out.append(ChannelConfig(**data))
+            out.append(SourceConfig(**data))
     return out
 
 
 def _require_records_db() -> None:
-    """
-    Ensure records.db exists and contains ingest_posts.
-    Fail fast if init has not been run.
-    """
     if not _DB_FILE.exists():
         raise RuntimeError(
-            f"records.db not found at {_DB_FILE}. "
-            "Run `sitrepc2 init` first."
+            f"records.db not found at {_DB_FILE}. Run `sitrepc2 init` first."
         )
 
     with sqlite3.connect(_DB_FILE) as conn:
         row = conn.execute(
-            """
-            SELECT 1
-            FROM sqlite_master
-            WHERE type='table' AND name='ingest_posts'
-            """
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ingest_posts'"
         ).fetchone()
-
         if row is None:
             raise RuntimeError(
                 "ingest_posts table not found in records.db. "
-                "Workspace schema is incomplete. "
                 "Run `sitrepc2 init --reconfigure`."
             )
 
@@ -134,7 +115,6 @@ def _utc_iso(dt: datetime) -> str:
 def _parse_date_range(start: str, end: Optional[str]) -> tuple[datetime, datetime]:
     start_d = date.fromisoformat(start)
     end_d = date.fromisoformat(end) if end else start_d
-
     return (
         datetime.combine(start_d, time.min, tzinfo=UTC),
         datetime.combine(end_d, time.max, tzinfo=UTC),
@@ -170,6 +150,7 @@ async def _fetch_async(
     start_date: str,
     end_date: Optional[str],
     aliases: Optional[List[str]],
+    source_name: Optional[List[str]],
 ) -> int:
 
     _ensure_sources_file()
@@ -179,13 +160,19 @@ async def _fetch_async(
     start_dt, end_dt = _parse_date_range(start_date, end_date)
 
     alias_filter = {a.lower() for a in aliases} if aliases else None
+    source_filter = {s.lower() for s in source_name} if source_name else None
 
-    channels = [
+    sources = [
         c for c in _load_sources()
-        if c.active and (alias_filter is None or c.channel_name.lower() in alias_filter)
+        if c.active
+        and (
+            (source_filter and c.source_name.lower() in source_filter)
+            or (not source_filter and alias_filter and c.source_name.lower() in alias_filter)
+            or (not source_filter and not alias_filter)
+        )
     ]
 
-    if not channels:
+    if not sources:
         logger.warning("No active Telegram sources matched fetch criteria")
         return 0
 
@@ -193,12 +180,11 @@ async def _fetch_async(
 
     async with TelegramClient(session_name, api_id, api_hash) as client:
         with sqlite3.connect(_DB_FILE) as conn:
-
-            for cfg in channels:
+            for cfg in sources:
                 try:
-                    entity = await client.get_entity(cfg.channel_name)
+                    entity = await client.get_entity(cfg.source_name)
                 except RPCError as e:
-                    logger.warning("Skipping %s: %s", cfg.channel_name, e)
+                    logger.warning("Skipping %s: %s", cfg.source_name, e)
                     continue
 
                 async for msg in _iter_messages(client, entity, start_dt, end_dt):
@@ -215,10 +201,10 @@ async def _fetch_async(
                         """,
                         (
                             "telegram",
-                            cfg.channel_name,
+                            cfg.source_name,
                             str(msg.id),
                             cfg.alias,
-                            cfg.channel_lang,
+                            cfg.source_lang,
                             _utc_iso(msg.date),
                             _utc_iso(datetime.now(UTC)),
                             text,
@@ -237,5 +223,8 @@ def fetch_posts(
     start_date: str,
     end_date: Optional[str] = None,
     aliases: Optional[List[str]] = None,
+    source_name: Optional[List[str]] = None,
 ) -> int:
-    return asyncio.run(_fetch_async(start_date, end_date, aliases))
+    return asyncio.run(
+        _fetch_async(start_date, end_date, aliases, source_name)
+    )

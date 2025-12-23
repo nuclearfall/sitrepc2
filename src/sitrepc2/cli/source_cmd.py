@@ -57,8 +57,8 @@ def _find_indices(
     key: str,
 ) -> List[int]:
     """
-    Find indices where alias or channel_name matches the key
-    (case-sensitive for now, but normalize '@' on channel_name).
+    Find indices where alias or source_name matches the key
+    (case-sensitive for now, but normalize '@' on source_name).
     """
     key = key.strip()
     norm_key = _normalize_name(key)
@@ -66,7 +66,7 @@ def _find_indices(
     for i, ch in enumerate(channels):
         if ch.get("alias") == key:
             idxs.append(i)
-        elif _normalize_name(str(ch.get("channel_name", ""))) == norm_key:
+        elif _normalize_name(str(ch.get("source_name", ""))) == norm_key:
             idxs.append(i)
     return idxs
 
@@ -77,16 +77,16 @@ def _print_channels(channels: List[Dict[str, Any]]) -> None:
         return
 
     table = Table(title="Sources (sources.jsonl)")
-    table.add_column("channel_name")
+    table.add_column("source_name")
     table.add_column("alias")
     table.add_column("lang")
     table.add_column("active", justify="center")
 
     for ch in channels:
         table.add_row(
-            str(ch.get("channel_name", "")),
+            str(ch.get("source_name", "")),
             str(ch.get("alias", "")),
-            str(ch.get("channel_lang", "")),
+            str(ch.get("source_lang", "")),
             "✅" if ch.get("active") else "❌",
         )
 
@@ -179,27 +179,27 @@ def add_source(
     if not lang:
         raise typer.BadParameter("Missing --lang (or use --entry).")
 
-    channel_name = _normalize_name(name)
+    source_name = _normalize_name(name)
     alias = alias.strip()
     lang = lang.strip()
 
     channels = _load_channels()
 
-    # Prevent duplicates by alias or channel_name
+    # Prevent duplicates by alias or source_name
     for ch in channels:
-        if _normalize_name(str(ch.get("channel_name", ""))) == channel_name:
+        if _normalize_name(str(ch.get("source_name", ""))) == source_name:
             raise typer.BadParameter(
-                f"Channel name '{channel_name}' already exists (alias={ch.get('alias')})."
+                f"Channel name '{source_name}' already exists (alias={ch.get('alias')})."
             )
         if ch.get("alias") == alias:
             raise typer.BadParameter(
-                f"Alias '{alias}' already exists (channel={ch.get('channel_name')})."
+                f"Alias '{alias}' already exists (channel={ch.get('source_name')})."
             )
 
     new_entry = {
-        "channel_name": channel_name,
+        "source_name": source_name,
         "alias": alias,
-        "channel_lang": lang,
+        "source_lang": lang,
         "active": bool(active),
     }
     channels.append(new_entry)
@@ -212,11 +212,11 @@ def add_source(
 def remove_source(
     key: str = typer.Argument(
         ...,
-        help="Alias or channel_name of the source to remove.",
+        help="Alias or source_name of the source to remove.",
     )
 ):
     """
-    Remove a source by alias or channel_name.
+    Remove a source by alias or source_name.
     """
     channels = _load_channels()
     idxs = _find_indices(channels, key)
@@ -238,7 +238,7 @@ def remove_source(
 def activate_source(
     key: str = typer.Argument(
         ...,
-        help="Alias or channel_name of the source to activate.",
+        help="Alias or source_name of the source to activate.",
     )
 ):
     """
@@ -261,7 +261,7 @@ def activate_source(
 def deactivate_source(
     key: str = typer.Argument(
         ...,
-        help="Alias or channel_name of the source to deactivate.",
+        help="Alias or source_name of the source to deactivate.",
     )
 ):
     """

@@ -33,9 +33,9 @@ HEADERS = {
 
 @dataclass
 class SourceConfig:
-    channel_name: str    # Base URL
+    source_name: str    # Base URL
     alias: str
-    channel_lang: str
+    source_lang: str
     active: bool
     source_kind: str
 
@@ -138,7 +138,7 @@ def fetch_posts(limit_per_source: int = 25) -> int:
     Scrape HTTP sources and ingest into records.db.
 
     Behavior:
-    - Discovers article links from channel_name (base URL)
+    - Discovers article links from source_name (base URL)
     - Uses FULL canonical article URL as source_post_id
     - Extracts published_at using strict heuristics
     - Applies MarianMT translation for non-English sources
@@ -157,12 +157,12 @@ def fetch_posts(limit_per_source: int = 25) -> int:
 
     with sqlite3.connect(_DB_FILE) as conn:
         for cfg in sources:
-            logger.info("Scraping HTTP source: %s", cfg.channel_name)
+            logger.info("Scraping HTTP source: %s", cfg.source_name)
 
             try:
-                links = list(_discover_links(cfg.channel_name))[:limit_per_source]
+                links = list(_discover_links(cfg.source_name))[:limit_per_source]
             except Exception as e:
-                logger.warning("Failed to fetch %s: %s", cfg.channel_name, e)
+                logger.warning("Failed to fetch %s: %s", cfg.source_name, e)
                 continue
 
             for url in links:
@@ -190,7 +190,7 @@ def fetch_posts(limit_per_source: int = 25) -> int:
                 # ------------------------------------------------------------
                 # Translation
                 # ------------------------------------------------------------
-                lang = cfg.channel_lang
+                lang = cfg.source_lang
 
                 if lang != "en":
                     try:
@@ -219,7 +219,7 @@ def fetch_posts(limit_per_source: int = 25) -> int:
                     """,
                     (
                         "http",
-                        cfg.channel_name,
+                        cfg.source_name,
                         url,                       # RAW canonical URL
                         cfg.alias,
                         lang,

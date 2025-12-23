@@ -9,7 +9,7 @@ import typer
 from rich import print
 from rich.table import Table
 
-from sitrepc2.config.paths import records_db_path
+from sitrepc2.config.paths import records_path as records_db_path
 
 app = typer.Typer(help="Query LSS-layer outputs (read-only).")
 
