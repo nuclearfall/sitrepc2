@@ -16,6 +16,9 @@ venv/
 .env/
 .venc/
 
+# Local helper scripts
+pushremote
+
 # -------------------------------------------------
 # SQLite / data artifacts
 # -------------------------------------------------
