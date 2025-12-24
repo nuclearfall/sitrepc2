@@ -12,6 +12,13 @@ from PySide6.QtWidgets import (
 
 from sitrepc2.gui.ingest.workspace import IngestWorkspace
 from sitrepc2.gui.dom.workspace import DomReviewWorkspace
+from sitrepc2.ingest.extract_lss import extract_posts_to_lss
+
+from sitrepc2.gui.ingest.loaders import (
+    load_ingest_posts,
+    load_sources,
+)
+
 
 
 class MainWindow(QMainWindow):
@@ -53,9 +60,14 @@ class MainWindow(QMainWindow):
     # ======================================================
 
     def _init_ingest_workspace(self) -> None:
-        ingest_ws = IngestWorkspace(
-            on_open_dom=self.open_dom_review
+        controller = IngestController(
+            load_sources_fn=load_sources,
+            load_posts_fn=load_ingest_posts,
+            extract_fn=extract_posts_to_lss,
+            on_open_dom=self.open_dom_review,
         )
+     
+        ingest_ws = IngestWorkspace(controller, parent=self)
 
         self._register_workspace("ingest", ingest_ws)
         self._show_workspace("ingest")

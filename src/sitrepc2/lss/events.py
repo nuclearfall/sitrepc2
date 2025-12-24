@@ -13,6 +13,39 @@ from sitrepc2.lss.lss_scoping import (
 )
 
 
+def compute_doc_span_from_raw_word_matches(raw: dict) -> Tuple[int, int]:
+    """
+    Compute the document-level token span for a Holmes match.
+
+    Structural helper only:
+    - no interpretation
+    - no word objects
+    - no semantic filtering
+    """
+
+    word_matches = raw.get("word_matches")
+    if not word_matches:
+        raise ValueError("Holmes match missing word_matches")
+
+    starts = []
+    ends = []
+
+    for wm in word_matches:
+        # Holmes provides document token indices
+        start = wm.get("document_token_index")
+        length = wm.get("document_token_length", 1)
+
+        if start is None:
+            continue
+
+        starts.append(start)
+        ends.append(start + length)
+
+    if not starts:
+        raise ValueError("Unable to compute span from Holmes word_matches")
+
+    return min(starts), max(ends)
+    
 def build_lss_events(
     *,
     doc: Doc,

@@ -46,19 +46,14 @@ class WordMatch:
 # ============================================================
 # HOLMES EVENT MATCH (TRANSPORT OBJECT)
 # ============================================================
-
 @dataclass(frozen=True, slots=True)
 class EventMatch:
     """
     High-level wrapper around a single Holmes match dict.
 
-    This is a *transport object only*:
-      • used by LSS to extract spans
-      • never stored directly
-      • never mutated
-      • never passed beyond LSS (except transiently through events.py)
-
-    All persistence happens via derived tables.
+    Transport object only.
+    Never persisted.
+    Never interpreted.
     """
 
     event_id: str
@@ -76,15 +71,4 @@ class EventMatch:
     doc_start_token_index: int
     doc_end_token_index: int
 
-    word_matches: list[WordMatch]
-    raw_match: Optional[dict[str, Any]] = None
-
-    def iter_content_words(self) -> Iterable[WordMatch]:
-        """
-        Yield word-matches that are not generic placeholders
-        like 'somebody' or 'something'.
-        """
-        for wm in self.word_matches:
-            if wm.document_word.lower() in {"somebody", "something"}:
-                continue
-            yield wm
+    raw_match: dict[str, Any]

@@ -15,7 +15,6 @@ from sitrepc2.lss.phrases import register_search_phrases
 from sitrepc2.lss.ruler import add_entity_rulers_from_db
 from sitrepc2.lss.sectioning import split_into_sections
 from sitrepc2.lss.events import (
-    build_word_matches,
     compute_doc_span_from_raw_word_matches,
     build_lss_events,
 )
@@ -157,10 +156,10 @@ def run_lss_pipeline(
                         involves_coreference=bool(raw.get("involves_coreference", False)),
                         doc_start_token_index=start,
                         doc_end_token_index=end,
-                        word_matches=build_word_matches(raw),
-                        raw_match=raw,
+                        raw_match=raw,  # provenance only
                     )
                 )
+
 
             # -------------------------
             # Structural scoping + validation

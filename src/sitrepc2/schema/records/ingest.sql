@@ -27,8 +27,3 @@ CREATE TABLE IF NOT EXISTS ingest_posts (
     -- Idempotency / dedupe
     UNIQUE (source, publisher, source_post_id)
 );
-
-----------------------------------------------------------------------
--- (Future tables will live alongside this)
--- nlp_runs, nlp_extractions, dom_events, etc.
-----------------------------------------------------------------------

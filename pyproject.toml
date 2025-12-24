@@ -22,11 +22,12 @@ dependencies = [
     "rich",
 
     # --- Geo / spatial ---
-    "shapely",
+    "shapely>=2.0",
     "pyproj",
     "pandas>=2.1,<2.2",
     "geopandas>=1.1.0,<1.2.0",
     "overpy>=0.6",
+    "rtree>=1.1",
 
     # --- Telegram ingestion ---
     "telethon",
@@ -48,7 +49,9 @@ dependencies = [
     "torch>=2.0,<2.3",
 
     # --- GUI (PySide6) ---
-    "pyside6"
+    "pyside6",
+    "osmium>=3.5"
+
 
 ]
 
@@ -57,15 +60,22 @@ dependencies = [
 # ----------------------------------------------------------------------
 
 [project.scripts]
-sitrepc2-cli = "sitrepc2.cli.app:app"
+sitrepc2 = "sitrepc2.cli.app:app"
 sitrepc2-gui = "sitrepc2.gui.main:main"
+rulereditc2 = "docruleredit.app:main"
 
 # ----------------------------------------------------------------------
 # Hatch build configuration
 # ----------------------------------------------------------------------
 
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [tool.hatch.build.targets.wheel]
-packages = ["src/sitrepc2"]
+packages = [
+    "src/sitrepc2",
+    "src/docruleredit",
+]
 
 [tool.hatch.build.targets.sdist]
 include = ["src"]
