@@ -30,17 +30,20 @@ from sitrepc2.gazetteer.alias_service import (
 )
 
 
-
 class MainWindow(QMainWindow):
     """
     Main application window.
-
-    Responsibilities:
-    - Coordinate controller + viewer
-    - Host Gazetteer alias editing panel
-    - Apply gazetteer changes and trigger NLP reload
-    - Manage entity highlight colors
     """
+
+    DEFAULT_COLORS = [
+        "#ffd966",
+        "#cfe2f3",
+        "#d9ead3",
+        "#f9cb9c",
+        "#f4cccc",
+        "#d9d2e9",
+        "#eeeeee",
+    ]
 
     def __init__(self, *, spacy_model: str, enable_coreferee: bool) -> None:
         super().__init__()
@@ -53,7 +56,7 @@ class MainWindow(QMainWindow):
             enable_coreferee=enable_coreferee,
         )
 
-        # Entity label → color (used by viewer)
+        # label -> color
         self.ruler_colors: Dict[str, str] = {}
 
         self._build_ui()
@@ -63,16 +66,11 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        # ---------------------------
-        # Central viewer
-        # ---------------------------
         self.viewer = DocumentHtmlViewer(self)
         self.setCentralWidget(self.viewer)
         self.viewer.tokenSelected.connect(self._on_token_selected)
 
-        # ---------------------------
-        # Left dock: Gazetteer alias panel
-        # ---------------------------
+        # Left dock
         self.alias_panel = GazetteerAliasPanel(self)
         left = QDockWidget("Gazetteer", self)
         left.setWidget(self.alias_panel)
@@ -88,9 +86,7 @@ class MainWindow(QMainWindow):
             self._on_aliases_committed
         )
 
-        # ---------------------------
-        # Right dock: inspection
-        # ---------------------------
+        # Right dock
         self.summary_panel = DocumentSummaryPanel(self)
         self.attr_panel = AttributeInspector(self)
 
@@ -103,9 +99,7 @@ class MainWindow(QMainWindow):
         right.setWidget(right_container)
         self.addDockWidget(Qt.RightDockWidgetArea, right)
 
-        # ---------------------------
         # Toolbar
-        # ---------------------------
         self.toolbar = HighlightToolBar(self)
         self.toolbar.colorChanged.connect(self._on_color_changed)
         self.addToolBar(Qt.TopToolBarArea, self.toolbar)
@@ -114,17 +108,15 @@ class MainWindow(QMainWindow):
         load_action.triggered.connect(self._on_load_ingest_text)
         self.toolbar.addAction(load_action)
 
-
     # ------------------------------------------------------------------
     # Document lifecycle
     # ------------------------------------------------------------------
 
     def load_text(self, text: str) -> None:
         doc = self.controller.load_text(text)
-        self._sync_entity_labels_from_doc()
+        self._ensure_label_colors()
         self.summary_panel.set_doc(doc)
         self._refresh_viewer()
-
 
     def _refresh_viewer(self) -> None:
         if not self.controller.doc:
@@ -135,9 +127,22 @@ class MainWindow(QMainWindow):
             ruler_colors=self.ruler_colors,
         )
 
+    def _ensure_label_colors(self) -> None:
+        if not self.controller.doc:
+            return
+
+        labels = sorted({ent.label_ for ent in self.controller.doc.ents})
+
+        for i, label in enumerate(labels):
+            if label not in self.ruler_colors:
+                self.ruler_colors[label] = (
+                    self.DEFAULT_COLORS[i % len(self.DEFAULT_COLORS)]
+                )
+
     # ------------------------------------------------------------------
-    # Gazetteer panel wiring
+    # Ingest loading
     # ------------------------------------------------------------------
+
     def _on_load_ingest_text(self) -> None:
         dialog = IngestRecordPickerDialog(self)
         if dialog.exec() != dialog.DialogCode.Accepted:
@@ -147,8 +152,11 @@ class MainWindow(QMainWindow):
         if not texts:
             return
 
-        combined_text = "\n\n".join(texts)
-        self.load_text(combined_text)
+        self.load_text("\n\n".join(texts))
+
+    # ------------------------------------------------------------------
+    # Gazetteer wiring
+    # ------------------------------------------------------------------
 
     def _on_gazetteer_search_requested(
         self,
@@ -160,16 +168,14 @@ class MainWindow(QMainWindow):
             search_text=search_text,
         )
 
-        results = [
+        self.alias_panel.set_results([
             GazetteerEntityRow(
                 entity_id=row["entity_id"],
                 canonical_name=row["canonical_name"],
                 domain=domain,
             )
             for row in rows
-        ]
-
-        self.alias_panel.set_results(results)
+        ])
 
     def _on_edit_aliases_requested(
         self,
@@ -178,12 +184,9 @@ class MainWindow(QMainWindow):
         if not rows:
             return
 
-        domain = rows[0].domain
-        entity_ids = [r.entity_id for r in rows]
-
         aliases = load_aliases_for_entities(
-            domain=domain,
-            entity_ids=entity_ids,
+            domain=rows[0].domain,
+            entity_ids=[r.entity_id for r in rows],
         )
 
         self.alias_panel.load_aliases(aliases)
@@ -195,9 +198,6 @@ class MainWindow(QMainWindow):
         added: list,
         removed: list,
     ) -> None:
-        if not added and not removed:
-            return
-
         apply_alias_changes(
             domain=domain,
             entity_ids=entity_ids,
@@ -205,41 +205,24 @@ class MainWindow(QMainWindow):
             removed=removed,
         )
 
-        # Re-derive rulers and rebuild doc
         self.controller.reload_rulers_and_rebuild()
-        self._sync_entity_labels_from_doc()
+        self._ensure_label_colors()
         self._refresh_viewer()
 
-    def _sync_entity_labels_from_doc(self) -> None:
-        """
-        Ensure all entity labels in the current doc are known
-        to the highlight toolbar and have colors.
-        """
-        if not self.controller.doc:
-            return
-
-        for ent in self.controller.doc.ents:
-            label = ent.label_
-            if label not in self.ruler_colors:
-                # Let the toolbar assign / manage the default color
-                color = self.toolbar.add_label(label)
-                self.ruler_colors[label] = color
-
     # ------------------------------------------------------------------
-    # Highlighting
+    # Highlight handling
     # ------------------------------------------------------------------
 
     def _on_color_changed(self, label: str, color: str) -> None:
-        if label:
-            self.ruler_colors[label] = color
-            self._refresh_viewer()
-
-    # ------------------------------------------------------------------
-    # Attribute inspection
-    # ------------------------------------------------------------------
+        self.ruler_colors[label] = color
+        self._refresh_viewer()
 
     def _on_token_selected(self, token, span) -> None:
         if span:
+            label = span.label_
+            self.toolbar.set_current_label(label)
+            self.toolbar.set_current_color(self.ruler_colors.get(label))
             self.attr_panel.set_span(span)
         else:
+            self.toolbar.set_current_label(None)
             self.attr_panel.set_token(token)

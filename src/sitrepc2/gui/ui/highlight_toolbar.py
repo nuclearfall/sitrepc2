@@ -1,3 +1,4 @@
+# src/sitrepc2/gui/ui/highlight_toolbar.py
 from __future__ import annotations
 
 from typing import Dict, Optional
@@ -13,20 +14,19 @@ from PySide6.QtWidgets import (
 
 class HighlightToolBar(QToolBar):
     """
-    Toolbar for controlling EntityRuler highlight colors.
+    Toolbar for editing highlight colors of entity labels.
 
     Responsibilities:
-    - Present a predefined set of highlight colors
-    - Show visual swatches for each color
-    - Apply color changes to the currently selected ruler
+    - Allow user to change color for the *currently selected* label
+    - Emit colorChanged(label, color_hex)
 
-    Signals:
-    - colorChanged(ruler_id: str, color_hex: str)
+    Does NOT:
+    - Track all labels
+    - Assign default colors
     """
 
-    colorChanged = Signal(str, str)  # ruler_id, color_hex
+    colorChanged = Signal(str, str)  # label, color_hex
 
-    # Preconfigured palette (document-editor-style)
     COLOR_PALETTE: Dict[str, str] = {
         "Yellow": "#ffd966",
         "Light Blue": "#cfe2f3",
@@ -40,12 +40,9 @@ class HighlightToolBar(QToolBar):
     def __init__(self, parent=None) -> None:
         super().__init__("Highlight Controls", parent)
 
-        self._current_ruler_id: Optional[str] = None
-
+        self._current_label: Optional[str] = None
         self._build_ui()
 
-    # ------------------------------------------------------------------
-    # UI Construction
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
@@ -57,8 +54,11 @@ class HighlightToolBar(QToolBar):
         self.color_combo.setEnabled(False)
 
         for name, hex_color in self.COLOR_PALETTE.items():
-            icon = self._make_color_icon(hex_color)
-            self.color_combo.addItem(icon, name, hex_color)
+            self.color_combo.addItem(
+                self._make_color_icon(hex_color),
+                name,
+                hex_color,
+            )
 
         self.color_combo.currentIndexChanged.connect(
             self._on_color_changed
@@ -70,37 +70,38 @@ class HighlightToolBar(QToolBar):
     # Public API
     # ------------------------------------------------------------------
 
-    def set_current_ruler(self, ruler_id: Optional[str]) -> None:
+    def set_current_label(self, label: Optional[str]) -> None:
         """
-        Update the currently selected ruler.
+        Set the label currently being edited.
+        """
+        self._current_label = label
+        self.color_combo.setEnabled(label is not None)
 
-        If no ruler is selected, the toolbar is disabled.
+    def set_current_color(self, color_hex: Optional[str]) -> None:
         """
-        self._current_ruler_id = ruler_id
-        self.color_combo.setEnabled(ruler_id is not None)
+        Sync dropdown to current label color.
+        """
+        if not color_hex:
+            return
 
-    def set_current_color(self, color_hex: str) -> None:
-        """
-        Sync the dropdown with the ruler's current color.
-        """
         for i in range(self.color_combo.count()):
             if self.color_combo.itemData(i) == color_hex:
                 self.color_combo.setCurrentIndex(i)
-                return
+                break
 
     # ------------------------------------------------------------------
-    # Event Handlers
+    # Events
     # ------------------------------------------------------------------
 
     def _on_color_changed(self, index: int) -> None:
-        if self._current_ruler_id is None:
+        if not self._current_label:
             return
 
         color_hex = self.color_combo.itemData(index)
         if not color_hex:
             return
 
-        self.colorChanged.emit(self._current_ruler_id, color_hex)
+        self.colorChanged.emit(self._current_label, color_hex)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -108,9 +109,6 @@ class HighlightToolBar(QToolBar):
 
     @staticmethod
     def _make_color_icon(color_hex: str) -> QIcon:
-        """
-        Create a small square color swatch icon.
-        """
         pixmap = QPixmap(16, 16)
         pixmap.fill(QColor(color_hex))
         return QIcon(pixmap)
