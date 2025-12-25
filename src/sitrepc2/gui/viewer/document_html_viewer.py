@@ -6,7 +6,7 @@ from PySide6.QtCore import Signal, QUrl, QObject, Slot
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebChannel import QWebChannel
 
-from spacy.tokens import Doc, Token, Span
+from spacy.tokens import Doc, Span
 
 
 class _JsBridge(QObject):
@@ -22,9 +22,9 @@ class DocumentHtmlViewer(QWebEngineView):
     HTML-based interactive viewer for spaCy Docs.
 
     Responsibilities:
-    - Render tokens/spans as HTML
-    - Highlight entity spans
-    - Show entity type on hover (tooltip)
+    - Render tokens as individual DOM nodes
+    - Visually unify entity spans
+    - Preserve token-level click precision
     - Emit tokenSelected(Token, Optional[Span])
     """
 
@@ -67,17 +67,35 @@ class DocumentHtmlViewer(QWebEngineView):
     def _build_html(self, doc: Doc, ruler_colors: Dict[str, str]) -> str:
         spans_by_token: Dict[int, str] = {}
         span_labels: Dict[int, str] = {}
+        span_first: Dict[int, bool] = {}
+        span_last: Dict[int, bool] = {}
+
+        # ----------------------------------------
+        # Map spaCy spans → token metadata
+        # ----------------------------------------
 
         for idx, span in enumerate(doc.ents):
             span_id = f"span_{idx}"
             self._span_map[span_id] = span
 
+            first_i = span[0].i
+            last_i = span[-1].i
+
             for tok in span:
                 spans_by_token[tok.i] = span_id
                 span_labels[tok.i] = span.label_
 
+                if tok.i == first_i:
+                    span_first[tok.i] = True
+                if tok.i == last_i:
+                    span_last[tok.i] = True
+
         css = self._build_css(ruler_colors)
         body_parts: list[str] = []
+
+        # ----------------------------------------
+        # Emit token HTML
+        # ----------------------------------------
 
         for tok in doc:
             span_id = spans_by_token.get(tok.i, "")
@@ -92,6 +110,11 @@ class DocumentHtmlViewer(QWebEngineView):
             if entity_label:
                 attrs.append(f'data-entity-label="{entity_label}"')
 
+                if span_first.get(tok.i):
+                    attrs.append('data-span-first="1"')
+                if span_last.get(tok.i):
+                    attrs.append('data-span-last="1"')
+
             attr_str = " ".join(attrs)
 
             body_parts.append(
@@ -99,6 +122,10 @@ class DocumentHtmlViewer(QWebEngineView):
             )
 
         body_html = "".join(body_parts)
+
+        # ----------------------------------------
+        # Final HTML
+        # ----------------------------------------
 
         return (
             "<!DOCTYPE html>"
@@ -137,24 +164,50 @@ class DocumentHtmlViewer(QWebEngineView):
             "body { white-space: pre-wrap; }",
             ".token { position: relative; cursor: pointer; }",
             ".token:hover { outline: 1px dotted #888; }",
+
+            # --- Base entity highlight ---
+            (
+                ".token[data-entity-label] {"
+                "  padding: 0.12em 0.18em;"
+                "  box-decoration-break: clone;"
+                "  -webkit-box-decoration-break: clone;"
+                "}"
+            ),
+
+            # --- Rounded span edges ---
+            (
+                ".token[data-span-first] {"
+                "  border-top-left-radius: 0.45em;"
+                "  border-bottom-left-radius: 0.45em;"
+                "}"
+            ),
+            (
+                ".token[data-span-last] {"
+                "  border-top-right-radius: 0.45em;"
+                "  border-bottom-right-radius: 0.45em;"
+                "}"
+            ),
+
+            # --- Tooltip ---
             (
                 ".token[data-entity-label]:hover::after {"
-                "content: attr(data-entity-label);"
-                "position: absolute;"
-                "top: -1.6em;"
-                "left: 0;"
-                "background: rgba(40,40,40,0.95);"
-                "color: #fff;"
-                "font-size: 0.75em;"
-                "padding: 2px 6px;"
-                "border-radius: 4px;"
-                "white-space: nowrap;"
-                "pointer-events: none;"
-                "z-index: 1000;"
+                "  content: attr(data-entity-label);"
+                "  position: absolute;"
+                "  top: -1.6em;"
+                "  left: 0;"
+                "  background: rgba(40,40,40,0.95);"
+                "  color: #fff;"
+                "  font-size: 0.75em;"
+                "  padding: 2px 6px;"
+                "  border-radius: 4px;"
+                "  white-space: nowrap;"
+                "  pointer-events: none;"
+                "  z-index: 1000;"
                 "}"
             ),
         ]
 
+        # --- Per-label background colors ---
         for label, color in ruler_colors.items():
             rules.append(
                 f'.token[data-entity-label="{label}"] {{ '
