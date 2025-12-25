@@ -35,7 +35,7 @@ def search_entities_by_alias(
     Search canonical entities by alias substring.
     """
     norm = normalize_alias(search_text)
-    like = f"%{norm}%"
+    like = f"{norm}%"
 
     table, id_col = _table_for_domain(domain)
 

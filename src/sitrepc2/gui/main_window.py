@@ -121,8 +121,10 @@ class MainWindow(QMainWindow):
 
     def load_text(self, text: str) -> None:
         doc = self.controller.load_text(text)
+        self._sync_entity_labels_from_doc()
         self.summary_panel.set_doc(doc)
         self._refresh_viewer()
+
 
     def _refresh_viewer(self) -> None:
         if not self.controller.doc:
@@ -205,7 +207,23 @@ class MainWindow(QMainWindow):
 
         # Re-derive rulers and rebuild doc
         self.controller.reload_rulers_and_rebuild()
+        self._sync_entity_labels_from_doc()
         self._refresh_viewer()
+
+    def _sync_entity_labels_from_doc(self) -> None:
+        """
+        Ensure all entity labels in the current doc are known
+        to the highlight toolbar and have colors.
+        """
+        if not self.controller.doc:
+            return
+
+        for ent in self.controller.doc.ents:
+            label = ent.label_
+            if label not in self.ruler_colors:
+                # Let the toolbar assign / manage the default color
+                color = self.toolbar.add_label(label)
+                self.ruler_colors[label] = color
 
     # ------------------------------------------------------------------
     # Highlighting
