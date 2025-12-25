@@ -26,10 +26,10 @@ class EntityRulerModel:
     # spaCy entity label (ent_type)
     label: str = ""
 
-    # Raw text patterns provided by the user (pre-split)
+    # Raw text patterns provided by the user (phrases)
     patterns: List[str] = field(default_factory=list)
 
-    # Whether matching should normalize text using .lower()
+    # Whether matching should normalize text using token.lower_
     normalize: bool = True
 
     # Highlight color (hex string, e.g. "#ffcc00")
@@ -74,12 +74,25 @@ class EntityRulerModel:
     # Pattern helpers
     # ------------------------------------------------------------------
 
-    def iter_patterns(self) -> Iterable[str]:
+    def iter_patterns(self) -> Iterable[List[Dict[str, str]]]:
         """
-        Yield patterns, applying normalization if required.
+        Yield spaCy EntityRuler-compatible token patterns.
+
+        Behavior:
+        - normalize=True  → case-insensitive matching via LOWER
+        - normalize=False → surface-form matching via ORTH
+
+        Each returned value is a list of token-attribute dicts,
+        suitable for direct use as an EntityRuler 'pattern'.
         """
-        if self.normalize:
-            for p in self.patterns:
-                yield p.lower()
-        else:
-            yield from self.patterns
+        for phrase in self.patterns:
+            phrase = phrase.strip()
+            if not phrase:
+                continue
+
+            tokens = phrase.split()
+
+            if self.normalize:
+                yield [{"LOWER": tok.lower()} for tok in tokens]
+            else:
+                yield [{"ORTH": tok} for tok in tokens]

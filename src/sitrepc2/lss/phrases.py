@@ -14,7 +14,7 @@ def load_war_lexicon() -> dict[str, Any]:
     path = lexicon_db_path()
     if not path or not path.exists():
         raise FileNotFoundError(
-            "Unable to locate war_lexicon.json. Have you run 'sitrepc2 init'?"
+            "Unable to locate lexicon.json. Have you run 'sitrepc2 init'?"
         )
     with path.open("r", encoding="utf8") as f:
         return json.load(f)

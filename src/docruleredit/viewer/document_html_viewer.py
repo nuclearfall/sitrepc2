@@ -1,0 +1,164 @@
+from __future__ import annotations
+
+from typing import Dict, Optional
+
+from PySide6.QtCore import Signal, QUrl, QObject, Slot
+from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWebChannel import QWebChannel
+
+from spacy.tokens import Doc, Token, Span
+
+
+class _JsBridge(QObject):
+    tokenClicked = Signal(int, object)  # token_i, span_id or None
+
+    @Slot(int, str)
+    def onTokenClicked(self, token_i: int, span_id: str) -> None:
+        self.tokenClicked.emit(token_i, span_id or None)
+
+
+class DocumentHtmlViewer(QWebEngineView):
+    """
+    HTML-based interactive viewer for spaCy Docs.
+
+    Responsibilities:
+    - Render tokens/spans as HTML
+    - Highlight entity spans
+    - Show entity type on hover (tooltip)
+    - Emit tokenSelected(Token, Optional[Span])
+    """
+
+    tokenSelected = Signal(object, object)  # Token, Optional[Span]
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+
+        self._doc: Optional[Doc] = None
+        self._span_map: Dict[str, Span] = {}
+
+        self._bridge = _JsBridge()
+        self._bridge.tokenClicked.connect(self._on_token_clicked)
+
+        channel = QWebChannel(self.page())
+        channel.registerObject("bridge", self._bridge)
+        self.page().setWebChannel(channel)
+
+    # ------------------------------------------------------------------
+
+    def set_doc(self, doc: Doc, *, ruler_colors: Dict[str, str]) -> None:
+        self._doc = doc
+        self._span_map.clear()
+
+        html = self._build_html(doc, ruler_colors)
+        self.setHtml(html, QUrl("qrc:///"))
+
+    # ------------------------------------------------------------------
+
+    def _on_token_clicked(self, token_i: int, span_id: Optional[str]) -> None:
+        if not self._doc:
+            return
+
+        token = self._doc[token_i]
+        span = self._span_map.get(span_id) if span_id else None
+        self.tokenSelected.emit(token, span)
+
+    # ------------------------------------------------------------------
+
+    def _build_html(self, doc: Doc, ruler_colors: Dict[str, str]) -> str:
+        spans_by_token: Dict[int, str] = {}
+        span_labels: Dict[int, str] = {}
+
+        for idx, span in enumerate(doc.ents):
+            span_id = f"span_{idx}"
+            self._span_map[span_id] = span
+
+            for tok in span:
+                spans_by_token[tok.i] = span_id
+                span_labels[tok.i] = span.label_
+
+        css = self._build_css(ruler_colors)
+        body_parts: list[str] = []
+
+        for tok in doc:
+            span_id = spans_by_token.get(tok.i, "")
+            entity_label = span_labels.get(tok.i, "")
+
+            attrs = [
+                'class="token"',
+                f'data-token-i="{tok.i}"',
+                f'data-span-id="{span_id}"',
+            ]
+
+            if entity_label:
+                attrs.append(f'data-entity-label="{entity_label}"')
+
+            attr_str = " ".join(attrs)
+
+            body_parts.append(
+                f"<span {attr_str}>{tok.text}</span>{tok.whitespace_}"
+            )
+
+        body_html = "".join(body_parts)
+
+        return (
+            "<!DOCTYPE html>"
+            "<html>"
+            "<head>"
+            '<meta charset="utf-8">'
+            "<style>"
+            f"{css}"
+            "</style>"
+            '<script src="qrc:///qtwebchannel/qwebchannel.js"></script>'
+            "<script>"
+            "new QWebChannel(qt.webChannelTransport, function(channel) {"
+            "  window.bridge = channel.objects.bridge;"
+            "});"
+            "document.addEventListener('click', function(e) {"
+            "  const el = e.target.closest('.token');"
+            "  if (!el) return;"
+            "  bridge.onTokenClicked("
+            "    parseInt(el.dataset.tokenI),"
+            "    el.dataset.spanId || ''"
+            "  );"
+            "});"
+            "</script>"
+            "</head>"
+            "<body>"
+            f"{body_html}"
+            "</body>"
+            "</html>"
+        )
+
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_css(ruler_colors: Dict[str, str]) -> str:
+        rules = [
+            ".token { position: relative; cursor: pointer; }",
+            ".token:hover { outline: 1px dotted #888; }",
+            (
+                ".token[data-entity-label]:hover::after {"
+                "content: attr(data-entity-label);"
+                "position: absolute;"
+                "top: -1.6em;"
+                "left: 0;"
+                "background: rgba(40,40,40,0.95);"
+                "color: #fff;"
+                "font-size: 0.75em;"
+                "padding: 2px 6px;"
+                "border-radius: 4px;"
+                "white-space: nowrap;"
+                "pointer-events: none;"
+                "z-index: 1000;"
+                "}"
+            ),
+        ]
+
+        for label, color in ruler_colors.items():
+            rules.append(
+                f'.token[data-entity-label="{label}"] {{ '
+                f'background-color: {color}; '
+                f'}}'
+            )
+
+        return "\n".join(rules)

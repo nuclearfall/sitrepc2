@@ -1,120 +1,93 @@
+# src/sitrepc2/gui/main_window.py
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Optional, Dict
+from typing import Dict
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
     QDockWidget,
     QVBoxLayout,
-    QInputDialog,
-    QMenuBar,
-    QMenu,
 )
 
 from .controller.document_controller import DocumentController
-from .viewer.document_viewer import DocumentViewer
-from .ui.entity_ruler_panel import EntityRulerPanel
+from .viewer.document_html_viewer import DocumentHtmlViewer
 from .ui.highlight_toolbar import HighlightToolBar
 from .ui.document_summary_panel import DocumentSummaryPanel
 from .ui.attribute_inspector import AttributeInspector
-from .ui.menus import MenuActions
-from .io.ruler_io import load_rulers_jsonl, save_rulers_jsonl
-from .models.entity_ruler import EntityRulerModel
+from .ui.gazetteer_alias_panel import (
+    GazetteerAliasPanel,
+    GazetteerEntityRow,
+)
+
+from sitrepc2.gazetteer.alias_service import (
+    search_entities_by_alias,
+    load_aliases_for_entities,
+    apply_alias_changes,
+)
 
 
 class MainWindow(QMainWindow):
     """
-    Fully wired main window.
+    Main application window.
 
-    Owns:
-    - Controller
-    - Viewer
-    - Docks
-    - Toolbar
-    - Menu actions
+    Responsibilities:
+    - Coordinate controller + viewer
+    - Host Gazetteer alias editing panel
+    - Apply gazetteer changes and trigger NLP reload
+    - Manage entity highlight colors
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, spacy_model: str, enable_coreferee: bool) -> None:
         super().__init__()
 
         self.setWindowTitle("spaCy Document Viewer")
         self.resize(1200, 800)
 
-        self.controller = DocumentController()
-        self.rulers: Dict[str, EntityRulerModel] = {}
+        self.controller = DocumentController(
+            spacy_model=spacy_model,
+            enable_coreferee=enable_coreferee,
+        )
 
-        # IMPORTANT: menus must exist before MenuActions wiring
-        self._build_menu_bar()
+        # Entity label → color (used by viewer)
+        self.ruler_colors: Dict[str, str] = {}
+
         self._build_ui()
 
-        self.menus = MenuActions(self)
-
     # ------------------------------------------------------------------
-    # Menu bar
-    # ------------------------------------------------------------------
-
-    def _build_menu_bar(self) -> None:
-        menu_bar = QMenuBar(self)
-        self.setMenuBar(menu_bar)
-
-        # ---- File menu ----
-        file_menu = QMenu("&File", self)
-
-        self.open_text_action = QAction("Open Text File", self)
-        self.open_json_action = QAction("Open JSON / JSONL File", self)
-        self.open_csv_action = QAction("Open CSV File", self)
-
-        file_menu.addAction(self.open_text_action)
-        file_menu.addAction(self.open_json_action)
-        file_menu.addAction(self.open_csv_action)
-
-        file_menu.addSeparator()
-
-        self.open_rulers_action = QAction("Open Rulers", self)
-        self.save_rulers_action = QAction("Save Current Rulers", self)
-
-        file_menu.addAction(self.open_rulers_action)
-        file_menu.addAction(self.save_rulers_action)
-
-        # ---- Edit menu ----
-        edit_menu = QMenu("&Edit", self)
-
-        self.copy_action = QAction("Copy", self)
-        self.cut_action = QAction("Cut", self)
-        self.paste_action = QAction("Paste", self)
-
-        edit_menu.addAction(self.copy_action)
-        edit_menu.addAction(self.cut_action)
-        edit_menu.addAction(self.paste_action)
-
-        menu_bar.addMenu(file_menu)
-        menu_bar.addMenu(edit_menu)
-
-    # ------------------------------------------------------------------
-    # UI construction
+    # UI
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        # ---- Central viewer ----
-        self.viewer = DocumentViewer(self)
+        # ---------------------------
+        # Central viewer
+        # ---------------------------
+        self.viewer = DocumentHtmlViewer(self)
         self.setCentralWidget(self.viewer)
         self.viewer.tokenSelected.connect(self._on_token_selected)
 
-        # ---- Left dock: Entity rulers ----
-        self.ruler_panel = EntityRulerPanel(self)
-        self.ruler_panel.rulerAdded.connect(self._on_ruler_added)
-        self.ruler_panel.rulerRemoved.connect(self._on_ruler_removed)
-        self.ruler_panel.rulerSelected.connect(self._on_ruler_selected)
+        # ---------------------------
+        # Left dock: Gazetteer alias panel
+        # ---------------------------
+        self.alias_panel = GazetteerAliasPanel(self)
+        left = QDockWidget("Gazetteer", self)
+        left.setWidget(self.alias_panel)
+        self.addDockWidget(Qt.LeftDockWidgetArea, left)
 
-        left_dock = QDockWidget("Entity Rulers", self)
-        left_dock.setWidget(self.ruler_panel)
-        self.addDockWidget(Qt.LeftDockWidgetArea, left_dock)
+        self.alias_panel.searchRequested.connect(
+            self._on_gazetteer_search_requested
+        )
+        self.alias_panel.editAliasesRequested.connect(
+            self._on_edit_aliases_requested
+        )
+        self.alias_panel.aliasesCommitted.connect(
+            self._on_aliases_committed
+        )
 
-        # ---- Right dock: Inspection ----
+        # ---------------------------
+        # Right dock: inspection
+        # ---------------------------
         self.summary_panel = DocumentSummaryPanel(self)
         self.attr_panel = AttributeInspector(self)
 
@@ -123,71 +96,105 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(self.summary_panel)
         right_layout.addWidget(self.attr_panel)
 
-        right_dock = QDockWidget("Inspection", self)
-        right_dock.setWidget(right_container)
-        self.addDockWidget(Qt.RightDockWidgetArea, right_dock)
+        right = QDockWidget("Inspection", self)
+        right.setWidget(right_container)
+        self.addDockWidget(Qt.RightDockWidgetArea, right)
 
-        # ---- Toolbar ----
+        # ---------------------------
+        # Toolbar: highlighting
+        # ---------------------------
         self.toolbar = HighlightToolBar(self)
         self.toolbar.colorChanged.connect(self._on_color_changed)
         self.addToolBar(Qt.TopToolBarArea, self.toolbar)
 
     # ------------------------------------------------------------------
-    # Document loading
+    # Document lifecycle
     # ------------------------------------------------------------------
 
     def load_text(self, text: str) -> None:
         doc = self.controller.load_text(text)
-        self._refresh_viewer()
         self.summary_panel.set_doc(doc)
-
-    def load_text_from_external(self, text: str) -> None:
-        self.load_text(text)
-
-    def load_file_from_external(self, path: str) -> None:
-        # Delegate to menu logic (keeps one code path)
-        self.menus._open_text()
-
-    # ------------------------------------------------------------------
-    # Viewer refresh
-    # ------------------------------------------------------------------
+        self._refresh_viewer()
 
     def _refresh_viewer(self) -> None:
-        color_map = {r.label: r.color for r in self.rulers.values()}
-        self.viewer.set_doc(self.controller.doc, ruler_colors=color_map)
+        if not self.controller.doc:
+            return
+
+        self.viewer.set_doc(
+            self.controller.doc,
+            ruler_colors=self.ruler_colors,
+        )
 
     # ------------------------------------------------------------------
-    # Ruler handling
+    # Gazetteer panel wiring
     # ------------------------------------------------------------------
 
-    def _on_ruler_added(self, ruler: EntityRulerModel) -> None:
-        self.rulers[ruler.ruler_id] = ruler
+    def _on_gazetteer_search_requested(
+        self,
+        domain: str,
+        search_text: str,
+    ) -> None:
+        rows = search_entities_by_alias(
+            domain=domain,
+            search_text=search_text,
+        )
 
-        spacy_ruler = self.controller.get_user_entity_ruler()
-        patterns = [
-            {"label": ruler.label, "pattern": p}
-            for p in ruler.iter_patterns()
+        results = [
+            GazetteerEntityRow(
+                entity_id=row["entity_id"],
+                canonical_name=row["canonical_name"],
+                domain=domain,
+            )
+            for row in rows
         ]
-        spacy_ruler.add_patterns(patterns)
 
-        self.controller.rebuild_doc()
+        self.alias_panel.set_results(results)
+
+    def _on_edit_aliases_requested(
+        self,
+        rows: list[GazetteerEntityRow],
+    ) -> None:
+        if not rows:
+            return
+
+        domain = rows[0].domain
+        entity_ids = [r.entity_id for r in rows]
+
+        aliases = load_aliases_for_entities(
+            domain=domain,
+            entity_ids=entity_ids,
+        )
+
+        self.alias_panel.load_aliases(aliases)
+
+    def _on_aliases_committed(
+        self,
+        domain: str,
+        entity_ids: list,
+        added: list,
+        removed: list,
+    ) -> None:
+        if not added and not removed:
+            return
+
+        apply_alias_changes(
+            domain=domain,
+            entity_ids=entity_ids,
+            added=added,
+            removed=removed,
+        )
+
+        # Re-derive rulers and rebuild doc
+        self.controller.reload_rulers_and_rebuild()
         self._refresh_viewer()
 
-    def _on_ruler_removed(self, ruler_id: str) -> None:
-        self.rulers.pop(ruler_id, None)
-        self.controller.reset_user_entity_ruler()
+    # ------------------------------------------------------------------
+    # Highlighting
+    # ------------------------------------------------------------------
 
-        for ruler in self.rulers.values():
-            self._on_ruler_added(ruler)
-
-    def _on_ruler_selected(self, ruler_id: Optional[str]) -> None:
-        self.toolbar.set_current_ruler(ruler_id)
-        if ruler_id and ruler_id in self.rulers:
-            self.toolbar.set_current_color(self.rulers[ruler_id].color)
-
-    def _on_color_changed(self, ruler_id: str, color: str) -> None:
-        if ruler_id in self.rulers:
-            self.rulers[ruler_id].color = color
+    def _on_color_changed(self, label: str, color: str) -> None:
+        if label:
+            self.ruler_colors[label] = color
             self._refresh_viewer()
 
     # ------------------------------------------------------------------
@@ -195,41 +202,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_token_selected(self, token, span) -> None:
-        if span is not None:
+        if span:
             self.attr_panel.set_span(span)
         else:
             self.attr_panel.set_token(token)
-
-    # ------------------------------------------------------------------
-    # Ruler persistence
-    # ------------------------------------------------------------------
-
-    def load_rulers(self) -> None:
-        path, _ = QInputDialog.getText(
-            self, "Open Rulers", "Path to JSONL file:"
-        )
-        if not path:
-            return
-
-        rulers = load_rulers_jsonl(Path(path))
-        self.rulers = {r.ruler_id: r for r in rulers}
-
-        self.controller.reset_user_entity_ruler()
-        for ruler in rulers:
-            self._on_ruler_added(ruler)
-
-    def save_rulers(self) -> None:
-        path, _ = QInputDialog.getText(
-            self, "Save Rulers", "Path to JSONL file:"
-        )
-        if not path:
-            return
-
-        save_rulers_jsonl(Path(path), self.rulers.values())
-
-    # ------------------------------------------------------------------
-    # Utilities
-    # ------------------------------------------------------------------
-
-    def prompt_text(self, title: str, label: str):
-        return QInputDialog.getText(self, title, label)

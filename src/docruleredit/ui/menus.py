@@ -1,21 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
-from ..io.text_loader import load_text_file
-from ..io.json_loader import load_json_text
-from ..io.csv_loader import load_csv_text
+from ..io.open_path import open_path, NeedsUserInput
 
 
 class MenuActions:
     """
-    Encapsulates File/Edit menu behavior.
-
-    This class wires menu actions to loader logic and delegates
-    document replacement to the MainWindow.
+    File / Edit menu wiring.
     """
 
     def __init__(self, main_window) -> None:
@@ -23,107 +17,95 @@ class MenuActions:
         self._wire_actions()
 
     # ------------------------------------------------------------------
-    # Wiring
-    # ------------------------------------------------------------------
 
     def _wire_actions(self) -> None:
-        self.main.open_text_action.triggered.connect(self._open_text)
-        self.main.open_json_action.triggered.connect(self._open_json)
-        self.main.open_csv_action.triggered.connect(self._open_csv)
+        m = self.main
 
-        self.main.open_rulers_action.triggered.connect(
-            self.main.load_rulers
-        )
-        self.main.save_rulers_action.triggered.connect(
-            self.main.save_rulers
-        )
+        m.open_text_action.triggered.connect(self._open_file)
+        m.open_rulers_action.triggered.connect(m.load_rulers)
+        m.save_rulers_action.triggered.connect(m.save_rulers)
 
-        self.main.copy_action.triggered.connect(
-            self.main.centralWidget().copy
-        )
-        self.main.cut_action.triggered.connect(
-            self.main.centralWidget().cut
-        )
-        self.main.paste_action.triggered.connect(
-            self.main.centralWidget().paste
-        )
+        m.copy_action.triggered.connect(self._copy)
+        m.cut_action.triggered.connect(self._cut)
+        m.paste_action.triggered.connect(self._paste)
 
     # ------------------------------------------------------------------
-    # File open handlers
+    # File open
     # ------------------------------------------------------------------
 
-    def _open_text(self) -> None:
+    def _open_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self.main, "Open Text File"
-        )
-        if not path:
-            return
-
-        try:
-            text = load_text_file(Path(path))
-        except Exception as exc:
-            self._error(str(exc))
-            return
-
-        self.main.load_text(text)
-
-    def _open_json(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self.main, "Open JSON / JSONL File"
-        )
-        if not path:
-            return
-
-        key, ok = self.main.prompt_text(
-            "JSON Key",
-            "Enter the JSON field containing text:",
-        )
-        if not ok or not key:
-            return
-
-        try:
-            text = load_json_text(Path(path), key)
-        except Exception as exc:
-            self._error(str(exc))
-            return
-
-        self.main.load_text(text)
-
-    def _open_csv(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self.main, "Open CSV File"
-        )
-        if not path:
-            return
-
-        column, ok = self.main.prompt_text(
-            "CSV Column",
-            "Enter the column header containing text:",
-        )
-        if not ok or not column:
-            return
-
-        delimiter, ok = self.main.prompt_text(
-            "CSV Delimiter (Optional)",
-            "Enter delimiter (leave blank to auto-detect):",
-        )
-        delimiter = delimiter or None
-
-        try:
-            text = load_csv_text(Path(path), column, delimiter)
-        except Exception as exc:
-            self._error(str(exc))
-            return
-
-        self.main.load_text(text)
-
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
-    def _error(self, message: str) -> None:
-        QMessageBox.critical(
             self.main,
-            "Error",
-            message,
+            "Open File",
+            "",
+            "All Files (*);;Text (*.txt);;JSON (*.json *.jsonl);;CSV (*.csv)",
         )
+
+        if not path:
+            return
+
+        path = Path(path)
+
+        try:
+            text = open_path(path)
+        except NeedsUserInput:
+            self._prompt_for_field(path)
+            return
+        except Exception as exc:
+            self._error(str(exc))
+            return
+
+        self.main.load_text(text)
+
+    def _prompt_for_field(self, path: Path) -> None:
+        suffix = path.suffix.lower()
+
+        if suffix in {".json", ".jsonl"}:
+            key, ok = self.main.prompt_text(
+                "JSON Field Required",
+                "Enter the JSON field containing text:",
+            )
+            if not ok or not key:
+                return
+
+            text = open_path(path, json_key=key)
+
+        elif suffix == ".csv":
+            column, ok = self.main.prompt_text(
+                "CSV Column Required",
+                "Enter the CSV column containing text:",
+            )
+            if not ok or not column:
+                return
+
+            text = open_path(path, csv_column=column)
+
+        else:
+            self._error("Unsupported file type")
+            return
+
+        self.main.load_text(text)
+
+    # ------------------------------------------------------------------
+    # Clipboard (viewer-agnostic)
+    # ------------------------------------------------------------------
+
+    def _copy(self) -> None:
+        w = self.main.centralWidget()
+        if hasattr(w, "page"):
+            w.page().triggerAction(w.page().Copy)
+
+    def _cut(self) -> None:
+        w = self.main.centralWidget()
+        if hasattr(w, "page"):
+            w.page().triggerAction(w.page().Cut)
+
+    def _paste(self) -> None:
+        w = self.main.centralWidget()
+        if hasattr(w, "page"):
+            w.page().triggerAction(w.page().Paste)
+
+    # ------------------------------------------------------------------
+
+    def _error(self, msg: str) -> None:
+        QMessageBox.critical(self.main, "Error", msg)

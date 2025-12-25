@@ -1,3 +1,4 @@
+# gui/aliasedit.py
 from __future__ import annotations
 
 import sys
@@ -6,6 +7,13 @@ from PySide6.QtWidgets import QApplication, QDialog
 
 from .ui.model_validator_dialog import ModelValidatorDialog
 from .main_window import MainWindow
+
+"""
+Alias editor entry point.
+
+Launches the sitrepc2 Gazetteer Alias Editor UI.
+Rulers are derived dynamically from gazetteer aliases.
+"""
 
 
 def main() -> int:

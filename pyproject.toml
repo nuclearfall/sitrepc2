@@ -62,7 +62,7 @@ dependencies = [
 [project.scripts]
 sitrepc2 = "sitrepc2.cli.app:app"
 sitrepc2-gui = "sitrepc2.gui.main:main"
-rulereditc2 = "docruleredit.app:main"
+alias-edit= "sitrepc2.gui.aliasedit:main"
 
 # ----------------------------------------------------------------------
 # Hatch build configuration
