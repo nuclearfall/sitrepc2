@@ -9,6 +9,10 @@ from PySide6.QtWebChannel import QWebChannel
 from spacy.tokens import Doc, Span
 
 
+# ---------------------------------------------------------------------
+# JS bridge
+# ---------------------------------------------------------------------
+
 class _JsBridge(QObject):
     tokenClicked = Signal(int, object)  # token_i, span_id or None
 
@@ -17,14 +21,19 @@ class _JsBridge(QObject):
         self.tokenClicked.emit(token_i, span_id or None)
 
 
+# ---------------------------------------------------------------------
+# Viewer
+# ---------------------------------------------------------------------
+
 class DocumentHtmlViewer(QWebEngineView):
     """
     HTML-based interactive viewer for spaCy Docs.
 
+    Guarantees:
     - Token-precise DOM nodes
-    - Visually unified entity spans
-    - Unified tooltip per entity
-    - Exact token click semantics preserved
+    - Unified entity span highlighting
+    - Unified tooltip per entity (hover anywhere)
+    - Whitespace inside spans is highlighted
     """
 
     tokenSelected = Signal(object, object)  # Token, Optional[Span]
@@ -47,16 +56,13 @@ class DocumentHtmlViewer(QWebEngineView):
     def set_doc(self, doc: Doc, *, ruler_colors: Dict[str, str]) -> None:
         self._doc = doc
         self._span_map.clear()
-
-        html = self._build_html(doc, ruler_colors)
-        self.setHtml(html, QUrl("qrc:///"))
+        self.setHtml(self._build_html(doc, ruler_colors), QUrl("qrc:///"))
 
     # ------------------------------------------------------------------
 
     def _on_token_clicked(self, token_i: int, span_id: Optional[str]) -> None:
         if not self._doc:
             return
-
         token = self._doc[token_i]
         span = self._span_map.get(span_id) if span_id else None
         self.tokenSelected.emit(token, span)
@@ -69,6 +75,10 @@ class DocumentHtmlViewer(QWebEngineView):
         span_first: Dict[int, bool] = {}
         span_last: Dict[int, bool] = {}
 
+        # ----------------------------------------
+        # Build span metadata
+        # ----------------------------------------
+
         for idx, span in enumerate(doc.ents):
             span_id = f"span_{idx}"
             self._span_map[span_id] = span
@@ -79,7 +89,6 @@ class DocumentHtmlViewer(QWebEngineView):
             for tok in span:
                 spans_by_token[tok.i] = span_id
                 span_labels[tok.i] = span.label_
-
                 if tok.i == first_i:
                     span_first[tok.i] = True
                 if tok.i == last_i:
@@ -88,9 +97,9 @@ class DocumentHtmlViewer(QWebEngineView):
         css = self._build_css(ruler_colors)
         body_parts: list[str] = []
 
-        # --------------------------------------------------
-        # Emit token HTML (whitespace absorbed for entities)
-        # --------------------------------------------------
+        # ----------------------------------------
+        # Emit token HTML
+        # ----------------------------------------
 
         for tok in doc:
             span_id = spans_by_token.get(tok.i, "")
@@ -102,27 +111,23 @@ class DocumentHtmlViewer(QWebEngineView):
                 f'data-span-id="{span_id}"',
             ]
 
-            text = tok.text
-
             if entity_label:
                 attrs.append(f'data-entity-label="{entity_label}"')
-
                 if span_first.get(tok.i):
                     attrs.append('data-span-first="1"')
                 if span_last.get(tok.i):
                     attrs.append('data-span-last="1"')
 
-                # absorb whitespace INSIDE entity
+                # absorb whitespace inside entity span
                 text = tok.text + tok.whitespace_
-
                 trailing = ""
             else:
+                text = tok.text
                 trailing = tok.whitespace_
 
-            attr_str = " ".join(attrs)
-            body_parts.append(f"<span {attr_str}>{text}</span>{trailing}")
-
-        body_html = "".join(body_parts)
+            body_parts.append(
+                f"<span {' '.join(attrs)}>{text}</span>{trailing}"
+            )
 
         return (
             "<!DOCTYPE html>"
@@ -137,6 +142,32 @@ class DocumentHtmlViewer(QWebEngineView):
             "new QWebChannel(qt.webChannelTransport, function(channel) {"
             "  window.bridge = channel.objects.bridge;"
             "});"
+
+            # ------------------------------
+            # Unified hover logic
+            # ------------------------------
+            "function setSpanHover(spanId, on) {"
+            "  if (!spanId) return;"
+            "  const first = document.querySelector("
+            "    '.token[data-span-id=\"' + spanId + '\"][data-span-first]'"
+            "  );"
+            "  if (!first) return;"
+            "  if (on) first.classList.add('span-hover');"
+            "  else first.classList.remove('span-hover');"
+            "}"
+
+            "document.addEventListener('mouseover', function(e) {"
+            "  const el = e.target.closest('.token[data-span-id]');"
+            "  if (!el) return;"
+            "  setSpanHover(el.dataset.spanId, true);"
+            "});"
+
+            "document.addEventListener('mouseout', function(e) {"
+            "  const el = e.target.closest('.token[data-span-id]');"
+            "  if (!el) return;"
+            "  setSpanHover(el.dataset.spanId, false);"
+            "});"
+
             "document.addEventListener('click', function(e) {"
             "  const el = e.target.closest('.token');"
             "  if (!el) return;"
@@ -148,7 +179,7 @@ class DocumentHtmlViewer(QWebEngineView):
             "</script>"
             "</head>"
             "<body>"
-            f"{body_html}"
+            f"{''.join(body_parts)}"
             "</body>"
             "</html>"
         )
@@ -161,7 +192,7 @@ class DocumentHtmlViewer(QWebEngineView):
             "body { white-space: pre-wrap; }",
             ".token { position: relative; cursor: pointer; }",
 
-            # --- Unified entity highlight ---
+            # --- Unified span highlight ---
             (
                 ".token[data-entity-label] {"
                 "  padding: 0.12em 0.18em;"
@@ -170,7 +201,7 @@ class DocumentHtmlViewer(QWebEngineView):
                 "}"
             ),
 
-            # --- Collapse internal seams ---
+            # --- Collapse seams between tokens ---
             (
                 ".token[data-entity-label]:not([data-span-first]) {"
                 "  margin-left: -0.18em;"
@@ -191,9 +222,9 @@ class DocumentHtmlViewer(QWebEngineView):
                 "}"
             ),
 
-            # --- Unified tooltip (FIRST TOKEN ONLY) ---
+            # --- Unified tooltip (driven by JS) ---
             (
-                ".token[data-span-first][data-entity-label]:hover::after {"
+                ".token[data-span-first].span-hover::after {"
                 "  content: attr(data-entity-label);"
                 "  position: absolute;"
                 "  top: -1.6em;"
