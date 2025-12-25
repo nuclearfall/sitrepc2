@@ -9,7 +9,7 @@ import typer
 from rich import print
 from rich.table import Table
 
-from sitrepc2.config.paths import current_root, sources_path
+from sitrepc2.config.paths import sources_path
 
 app = typer.Typer(help="Manage social media source channels (sources.jsonl).")
 
@@ -20,7 +20,6 @@ app = typer.Typer(help="Manage social media source channels (sources.jsonl).")
 
 def _channel_file() -> Path:
     """Return the workspace sources.jsonl path (under .sitrepc2/)."""
-    root = current_root()
     return sources_path(root)
 
 

@@ -16,7 +16,7 @@ app = typer.Typer(help="sitrepc2 command line interface")
 # namespaces
 app.add_typer(init_app, name="init")
 # app.add_typer(db_app, name="db")
-# app.add_typer(source_app, name="source")
+app.add_typer(source_app, name="source")
 app.add_typer(lss_app, name="lss")
 
 # standalone verbs
