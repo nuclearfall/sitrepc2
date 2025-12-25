@@ -9,21 +9,13 @@ from PySide6.QtWebChannel import QWebChannel
 from spacy.tokens import Doc, Span
 
 
-# ---------------------------------------------------------------------
-# JS bridge
-# ---------------------------------------------------------------------
-
 class _JsBridge(QObject):
-    tokenClicked = Signal(int, object)  # token_i, span_id or None
+    tokenClicked = Signal(int, object)
 
     @Slot(int, str)
     def onTokenClicked(self, token_i: int, span_id: str) -> None:
         self.tokenClicked.emit(token_i, span_id or None)
 
-
-# ---------------------------------------------------------------------
-# Viewer
-# ---------------------------------------------------------------------
 
 class DocumentHtmlViewer(QWebEngineView):
     """
@@ -36,7 +28,7 @@ class DocumentHtmlViewer(QWebEngineView):
     - Whitespace inside spans is highlighted
     """
 
-    tokenSelected = Signal(object, object)  # Token, Optional[Span]
+    tokenSelected = Signal(object, object)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -75,10 +67,6 @@ class DocumentHtmlViewer(QWebEngineView):
         span_first: Dict[int, bool] = {}
         span_last: Dict[int, bool] = {}
 
-        # ----------------------------------------
-        # Build span metadata
-        # ----------------------------------------
-
         for idx, span in enumerate(doc.ents):
             span_id = f"span_{idx}"
             self._span_map[span_id] = span
@@ -95,15 +83,11 @@ class DocumentHtmlViewer(QWebEngineView):
                     span_last[tok.i] = True
 
         css = self._build_css(ruler_colors)
-        body_parts: list[str] = []
-
-        # ----------------------------------------
-        # Emit token HTML
-        # ----------------------------------------
+        body: list[str] = []
 
         for tok in doc:
             span_id = spans_by_token.get(tok.i, "")
-            entity_label = span_labels.get(tok.i, "")
+            label = span_labels.get(tok.i, "")
 
             attrs = [
                 'class="token"',
@@ -111,21 +95,19 @@ class DocumentHtmlViewer(QWebEngineView):
                 f'data-span-id="{span_id}"',
             ]
 
-            if entity_label:
-                attrs.append(f'data-entity-label="{entity_label}"')
+            if label:
+                attrs.append(f'data-entity-label="{label}"')
                 if span_first.get(tok.i):
                     attrs.append('data-span-first="1"')
                 if span_last.get(tok.i):
                     attrs.append('data-span-last="1"')
-
-                # absorb whitespace inside entity span
                 text = tok.text + tok.whitespace_
                 trailing = ""
             else:
                 text = tok.text
                 trailing = tok.whitespace_
 
-            body_parts.append(
+            body.append(
                 f"<span {' '.join(attrs)}>{text}</span>{trailing}"
             )
 
@@ -134,18 +116,13 @@ class DocumentHtmlViewer(QWebEngineView):
             "<html>"
             "<head>"
             '<meta charset="utf-8">'
-            "<style>"
-            f"{css}"
-            "</style>"
+            "<style>" + css + "</style>"
             '<script src="qrc:///qtwebchannel/qwebchannel.js"></script>'
             "<script>"
             "new QWebChannel(qt.webChannelTransport, function(channel) {"
             "  window.bridge = channel.objects.bridge;"
             "});"
 
-            # ------------------------------
-            # Unified hover logic
-            # ------------------------------
             "function setSpanHover(spanId, on) {"
             "  if (!spanId) return;"
             "  const first = document.querySelector("
@@ -179,7 +156,7 @@ class DocumentHtmlViewer(QWebEngineView):
             "</script>"
             "</head>"
             "<body>"
-            f"{''.join(body_parts)}"
+            + "".join(body) +
             "</body>"
             "</html>"
         )
@@ -192,7 +169,6 @@ class DocumentHtmlViewer(QWebEngineView):
             "body { white-space: pre-wrap; }",
             ".token { position: relative; cursor: pointer; }",
 
-            # --- Unified span highlight ---
             (
                 ".token[data-entity-label] {"
                 "  padding: 0.12em 0.18em;"
@@ -200,15 +176,11 @@ class DocumentHtmlViewer(QWebEngineView):
                 "  -webkit-box-decoration-break: clone;"
                 "}"
             ),
-
-            # --- Collapse seams between tokens ---
             (
                 ".token[data-entity-label]:not([data-span-first]) {"
                 "  margin-left: -0.18em;"
                 "}"
             ),
-
-            # --- Rounded edges ---
             (
                 ".token[data-span-first] {"
                 "  border-top-left-radius: 0.45em;"
@@ -221,8 +193,6 @@ class DocumentHtmlViewer(QWebEngineView):
                 "  border-bottom-right-radius: 0.45em;"
                 "}"
             ),
-
-            # --- Unified tooltip (driven by JS) ---
             (
                 ".token[data-span-first].span-hover::after {"
                 "  content: attr(data-entity-label);"
