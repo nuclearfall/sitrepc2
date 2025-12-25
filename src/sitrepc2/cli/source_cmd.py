@@ -20,7 +20,7 @@ app = typer.Typer(help="Manage social media source channels (sources.jsonl).")
 
 def _channel_file() -> Path:
     """Return the workspace sources.jsonl path (under .sitrepc2/)."""
-    return sources_path(root)
+    return sources_path()
 
 
 def _normalize_name(name: str) -> str:
