@@ -29,6 +29,12 @@ from sitrepc2.gazetteer.alias_service import (
     apply_alias_changes,
 )
 
+GAZETTEER_LABELS = {
+    "LOCATION",
+    "REGION",
+    "GROUP",
+    "DIRECTION",
+}
 
 class MainWindow(QMainWindow):
     """
@@ -131,13 +137,12 @@ class MainWindow(QMainWindow):
         if not self.controller.doc:
             return
 
-        labels = sorted({ent.label_ for ent in self.controller.doc.ents})
+        for ent in self.controller.doc.ents:
+            if ent.label_ not in GAZETTEER_LABELS:
+                continue
 
-        for i, label in enumerate(labels):
-            if label not in self.ruler_colors:
-                self.ruler_colors[label] = (
-                    self.DEFAULT_COLORS[i % len(self.DEFAULT_COLORS)]
-                )
+            if ent.label_ not in self.ruler_colors:
+                self.ruler_colors[ent.label_] = self._next_color()
 
     # ------------------------------------------------------------------
     # Ingest loading
