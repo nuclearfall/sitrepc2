@@ -134,6 +134,7 @@ class DocumentHtmlViewer(QWebEngineView):
     @staticmethod
     def _build_css(ruler_colors: Dict[str, str]) -> str:
         rules = [
+            "body { white-space: pre-wrap; }",
             ".token { position: relative; cursor: pointer; }",
             ".token:hover { outline: 1px dotted #888; }",
             (
