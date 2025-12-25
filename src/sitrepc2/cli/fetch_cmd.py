@@ -38,6 +38,11 @@ def fetch_callback(
         help="End date (YYYY-MM-DD). Defaults to start.",
         callback=lambda x: _validate_iso_date("end", x) if x else None,
     ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Re-fetch posts even if they already exist in ingest_posts.",
+    ),
 ):
     aliases: Optional[List[str]]
     if source.lower() == "all":
@@ -49,6 +54,7 @@ def fetch_callback(
         start_date=start,
         end_date=end,
         aliases=aliases,
+        force=force,
     )
 
     print(f"[green]Inserted {count} Telegram posts into ingest DB[/green]")

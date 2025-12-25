@@ -151,6 +151,8 @@ async def _fetch_async(
     end_date: Optional[str],
     aliases: Optional[List[str]],
     source_name: Optional[List[str]],
+    *,
+    force: bool,
 ) -> int:
 
     _ensure_sources_file()
@@ -192,14 +194,37 @@ async def _fetch_async(
                     if not text.strip():
                         continue
 
+                    if force:
+                        conn.execute(
+                            """
+                            DELETE FROM ingest_posts
+                            WHERE source = ?
+                              AND publisher = ?
+                              AND source_post_id = ?
+                            """,
+                            (
+                                "telegram",
+                                cfg.source_name,
+                                str(msg.id),
+                            ),
+                        )
+
+                        insert_sql = """
+                            INSERT INTO ingest_posts
+                            (source, publisher, source_post_id,
+                             alias, lang, published_at, fetched_at, text)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """
+                    else:
+                        insert_sql = """
+                            INSERT OR IGNORE INTO ingest_posts
+                            (source, publisher, source_post_id,
+                             alias, lang, published_at, fetched_at, text)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """
 
                     cur = conn.execute(
-                        """
-                        INSERT OR IGNORE INTO ingest_posts
-                        (source, publisher, source_post_id,
-                         alias, lang, published_at, fetched_at, text)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
+                        insert_sql,
                         (
                             "telegram",
                             cfg.source_name,
@@ -225,6 +250,8 @@ def fetch_posts(
     end_date: Optional[str] = None,
     aliases: Optional[List[str]] = None,
     source_name: Optional[List[str]] = None,
+    *,
+    force: bool = False,
 ) -> int:
     return asyncio.run(
         _fetch_async(start_date, end_date, aliases, source_name)
