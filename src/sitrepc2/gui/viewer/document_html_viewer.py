@@ -174,6 +174,13 @@ class DocumentHtmlViewer(QWebEngineView):
                 "}"
             ),
 
+            # --- Collapse internal gaps between tokens in the same span ---
+            (
+                ".token[data-entity-label]:not([data-span-first]) {"
+                "  margin-left: -0.18em;"
+                "}"
+            ),
+
             # --- Rounded span edges ---
             (
                 ".token[data-span-first] {"
