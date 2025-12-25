@@ -254,5 +254,5 @@ def fetch_posts(
     force: bool = False,
 ) -> int:
     return asyncio.run(
-        _fetch_async(start_date, end_date, aliases, source_name, force)
+        _fetch_async(start_date, end_date, aliases, source_name, force=force)
     )
