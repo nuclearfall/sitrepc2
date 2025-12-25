@@ -91,30 +91,49 @@ def apply_alias_changes(
     added: Iterable[str],
     removed: Iterable[str],
 ) -> None:
+    """
+    Apply alias additions/removals to the canonical alias tables.
+
+    NOTE:
+    - The `aliases` object is a VIEW and is NOT writable.
+    - Writes must go to the per-domain alias tables.
+    """
+    table, id_col = _alias_table_for_domain(domain)
+
     with _conn() as con:
         for entity_id in entity_ids:
             for alias in added:
                 norm = normalize_alias(alias)
                 con.execute(
-                    """
-                    INSERT OR IGNORE INTO aliases
-                        (entity_type, entity_id, alias, normalized)
-                    VALUES (?, ?, ?, ?)
+                    f"""
+                    INSERT OR IGNORE INTO {table}
+                        ({id_col}, alias, normalized)
+                    VALUES (?, ?, ?)
                     """,
-                    (domain, entity_id, alias, norm),
+                    (entity_id, alias, norm),
                 )
 
             for alias in removed:
                 norm = normalize_alias(alias)
                 con.execute(
-                    """
-                    DELETE FROM aliases
-                    WHERE entity_type = ?
-                      AND entity_id = ?
+                    f"""
+                    DELETE FROM {table}
+                    WHERE {id_col} = ?
                       AND normalized = ?
                     """,
-                    (domain, entity_id, norm),
+                    (entity_id, norm),
                 )
+
+def _alias_table_for_domain(domain: str) -> tuple[str, str]:
+    if domain == "LOCATION":
+        return "location_aliases", "location_id"
+    if domain == "REGION":
+        return "region_aliases", "region_id"
+    if domain == "GROUP":
+        return "group_aliases", "group_id"
+    if domain == "DIRECTION":
+        return "direction_aliases", "direction_id"
+    raise ValueError(f"Unknown domain: {domain}")
 
 
 # ---------------------------------------------------------------------
