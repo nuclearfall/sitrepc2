@@ -138,7 +138,7 @@ def init_workspace(
         if not src.exists():
             raise RuntimeError(f"Missing seed DB: {src}")
         shutil.copy2(src, gz_dst)
-        typer.secho("Copied gazetteer DB.", fg=typer.colors.GREEN)
+        typer.secho("Seeded gazetteer DB.", fg=typer.colors.GREEN)
 
     # --------------------------------------------------
     # 2. Records DB
@@ -150,11 +150,11 @@ def init_workspace(
     # --------------------------------------------------
     if not lexicon_path(root).exists():
         shutil.copy2(seed_lexicon_path(), lexicon_path(root))
-        typer.secho("Copied war_lexicon.json", fg=typer.colors.GREEN)
+        typer.secho("Seeded .sitrepc2/lexicon.json", fg=typer.colors.GREEN)
 
     if not sources_path(root).exists():
         shutil.copy2(seed_sources_path(), sources_path(root))
-        typer.secho("Copied sources.jsonl", fg=typer.colors.GREEN)
+        typer.secho("Seeded .sitrepc2/sources.jsonl", fg=typer.colors.GREEN)
 
     # --------------------------------------------------
     # 4. NLP runtime
