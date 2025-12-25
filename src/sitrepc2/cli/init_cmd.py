@@ -50,13 +50,14 @@ def _init_records_db(root: Path) -> None:
     db = records_path(root)
     db.parent.mkdir(parents=True, exist_ok=True)
 
-    if not db.exists():
+    is_new = not db.exists()
+
+    if is_new:
         db.touch()
         typer.secho(f"Created records database: {db}", fg=typer.colors.GREEN)
+        _apply_rec_schemas(db)
     else:
         typer.secho(f"Records database exists: {db}", fg=typer.colors.YELLOW)
-
-    _apply_rec_schemas(db)
 
 def _spacy_model_installed(model: str) -> bool:
     try:
