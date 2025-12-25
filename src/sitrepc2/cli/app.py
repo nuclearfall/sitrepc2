@@ -5,7 +5,7 @@ import typer
 
 from .init_cmd import app as init_app
 # from .db_cmd import app as db_app
-# from .source_cmd import app as source_app
+from .source_cmd import app as source_app
 from .lss_cmd import app as lss_app
 
 from .fetch_cmd import fetch_callback as fetch
