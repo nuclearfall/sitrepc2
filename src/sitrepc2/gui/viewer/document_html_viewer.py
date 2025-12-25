@@ -21,11 +21,10 @@ class DocumentHtmlViewer(QWebEngineView):
     """
     HTML-based interactive viewer for spaCy Docs.
 
-    Responsibilities:
-    - Render tokens as individual DOM nodes
-    - Visually unify entity spans
-    - Preserve token-level click precision
-    - Emit tokenSelected(Token, Optional[Span])
+    - Token-precise DOM nodes
+    - Visually unified entity spans
+    - Unified tooltip per entity
+    - Exact token click semantics preserved
     """
 
     tokenSelected = Signal(object, object)  # Token, Optional[Span]
@@ -70,10 +69,6 @@ class DocumentHtmlViewer(QWebEngineView):
         span_first: Dict[int, bool] = {}
         span_last: Dict[int, bool] = {}
 
-        # ----------------------------------------
-        # Map spaCy spans → token metadata
-        # ----------------------------------------
-
         for idx, span in enumerate(doc.ents):
             span_id = f"span_{idx}"
             self._span_map[span_id] = span
@@ -93,9 +88,9 @@ class DocumentHtmlViewer(QWebEngineView):
         css = self._build_css(ruler_colors)
         body_parts: list[str] = []
 
-        # ----------------------------------------
-        # Emit token HTML
-        # ----------------------------------------
+        # --------------------------------------------------
+        # Emit token HTML (whitespace absorbed for entities)
+        # --------------------------------------------------
 
         for tok in doc:
             span_id = spans_by_token.get(tok.i, "")
@@ -107,6 +102,8 @@ class DocumentHtmlViewer(QWebEngineView):
                 f'data-span-id="{span_id}"',
             ]
 
+            text = tok.text
+
             if entity_label:
                 attrs.append(f'data-entity-label="{entity_label}"')
 
@@ -115,17 +112,17 @@ class DocumentHtmlViewer(QWebEngineView):
                 if span_last.get(tok.i):
                     attrs.append('data-span-last="1"')
 
-            attr_str = " ".join(attrs)
+                # absorb whitespace INSIDE entity
+                text = tok.text + tok.whitespace_
 
-            body_parts.append(
-                f"<span {attr_str}>{tok.text}</span>{tok.whitespace_}"
-            )
+                trailing = ""
+            else:
+                trailing = tok.whitespace_
+
+            attr_str = " ".join(attrs)
+            body_parts.append(f"<span {attr_str}>{text}</span>{trailing}")
 
         body_html = "".join(body_parts)
-
-        # ----------------------------------------
-        # Final HTML
-        # ----------------------------------------
 
         return (
             "<!DOCTYPE html>"
@@ -163,9 +160,8 @@ class DocumentHtmlViewer(QWebEngineView):
         rules = [
             "body { white-space: pre-wrap; }",
             ".token { position: relative; cursor: pointer; }",
-            ".token:hover { outline: 1px dotted #888; }",
 
-            # --- Base entity highlight ---
+            # --- Unified entity highlight ---
             (
                 ".token[data-entity-label] {"
                 "  padding: 0.12em 0.18em;"
@@ -174,14 +170,14 @@ class DocumentHtmlViewer(QWebEngineView):
                 "}"
             ),
 
-            # --- Collapse internal gaps between tokens in the same span ---
+            # --- Collapse internal seams ---
             (
                 ".token[data-entity-label]:not([data-span-first]) {"
                 "  margin-left: -0.18em;"
                 "}"
             ),
 
-            # --- Rounded span edges ---
+            # --- Rounded edges ---
             (
                 ".token[data-span-first] {"
                 "  border-top-left-radius: 0.45em;"
@@ -195,9 +191,9 @@ class DocumentHtmlViewer(QWebEngineView):
                 "}"
             ),
 
-            # --- Tooltip ---
+            # --- Unified tooltip (FIRST TOKEN ONLY) ---
             (
-                ".token[data-entity-label]:hover::after {"
+                ".token[data-span-first][data-entity-label]:hover::after {"
                 "  content: attr(data-entity-label);"
                 "  position: absolute;"
                 "  top: -1.6em;"
@@ -214,7 +210,6 @@ class DocumentHtmlViewer(QWebEngineView):
             ),
         ]
 
-        # --- Per-label background colors ---
         for label, color in ruler_colors.items():
             rules.append(
                 f'.token[data-entity-label="{label}"] {{ '
