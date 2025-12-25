@@ -119,8 +119,8 @@ async def _fetch_async(
             await twint.run.Search(c)
 
             for t in twint.output.tweets_list:
-                raw_text = (t.tweet or "").strip()
-                if not raw_text:
+                raw_text = t.tweet
+                if not raw_text.strip():
                     continue
 
                 published = datetime.fromtimestamp(t.datestamp, tz=UTC)

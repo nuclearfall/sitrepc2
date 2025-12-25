@@ -81,20 +81,24 @@ def translate_to_english(
     RuntimeError
         If language unsupported or translation fails
     """
-
     if not text.strip():
         return ""
 
-    source_lang = source_lang.lower()
-
-    if source_lang == "en":
+    if source_lang.lower() == "en":
         return text
 
     tokenizer, model = _load_model(source_lang)
 
-    try:
+    paragraphs = text.split("\n\n")
+    out = []
+
+    for p in paragraphs:
+        if not p.strip():
+            out.append("")
+            continue
+
         batch = tokenizer(
-            text,
+            p,
             return_tensors="pt",
             truncation=True,
             max_length=max_length,
@@ -108,17 +112,11 @@ def translate_to_english(
                 early_stopping=True,
             )
 
-        translated = tokenizer.decode(
-            generated[0],
-            skip_special_tokens=True,
+        out.append(
+            tokenizer.decode(generated[0], skip_special_tokens=True)
         )
 
-        return translated
-
-    except Exception as e:
-        logger.exception("MarianMT translation failed")
-        raise RuntimeError("Translation failed") from e
-
+    return "\n\n".join(out)
 
 # ---------------------------------------------------------------------------
 # Convenience wrapper (optional use)

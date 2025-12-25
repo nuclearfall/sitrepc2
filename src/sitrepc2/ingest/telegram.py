@@ -188,9 +188,10 @@ async def _fetch_async(
                     continue
 
                 async for msg in _iter_messages(client, entity, start_dt, end_dt):
-                    text = (msg.message or "").strip()
-                    if not text:
+                    text = msg.message or ""
+                    if not text.strip():
                         continue
+
 
                     cur = conn.execute(
                         """

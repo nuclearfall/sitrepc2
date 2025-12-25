@@ -121,10 +121,12 @@ def _fetch_page(url: str) -> tuple[str, str, dict]:
     # Readability-based extraction
     doc = Document(html)
     soup = BeautifulSoup(doc.summary(html_partial=True), "html.parser")
-    text = "\n".join(
-        p.get_text(" ", strip=True)
+    text = "\n\n".join(
+        p.get_text(separator="\n", strip=False)
         for p in soup.find_all("p")
-    ).strip()
+    ).rstrip()
+    if not text.strip():
+        return ""
 
     return html, text, dict(resp.headers)
 
