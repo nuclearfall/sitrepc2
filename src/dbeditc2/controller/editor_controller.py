@@ -15,6 +15,7 @@ from dbeditc2.widgets.app_toolbar import AppToolBar
 
 from sitrepc2.gazetteer.alias_service import apply_alias_changes
 from dbeditc2.services.gazetteer_search import _DOMAIN_FOR_COLLECTION
+from dbeditc2.services.gazetteer_alias_browser import list_aliases
 
 
 class EditorController:
@@ -88,9 +89,16 @@ class EditorController:
         self._current_collection = kind
         self._current_entity_id = None
 
-        entries = list_entities(kind)
+        try:
+            entries = list_aliases(kind=kind)
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to list aliases for {kind}"
+            ) from e
+
         self._entry_list.set_entries(entries)
         self._details.show_empty()
+
 
     def on_entry_selected(self, entry_id: int) -> None:
         if self._current_collection is None:
@@ -122,18 +130,26 @@ class EditorController:
 
     def on_search_text_changed(self, text: str) -> None:
         if self._current_collection is None:
-            return
+            raise RuntimeError("Search invoked with no active collection")
 
-        if not text.strip():
-            entries = list_entities(self._current_collection)
-        else:
-            entries = search_entities(
-                collection=self._current_collection,
-                text=text,
+        try:
+            entries = list_aliases(
+                kind=self._current_collection,
+                search_text=text,
             )
+        except Exception as e:
+            raise RuntimeError(
+                f"Alias search failed for {self._current_collection}: {text!r}"
+            ) from e
 
         self._entry_list.set_entries(entries)
         self._details.show_empty()
+
+
+    def on_search_submitted(self, text: str) -> None:
+        # identical behavior, explicit entry point
+        self.on_search_text_changed(text)
+
 
     def on_search_submitted(self, text: str) -> None:
         self.on_search_text_changed(text)
