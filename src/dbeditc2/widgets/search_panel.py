@@ -1,4 +1,3 @@
-# src/dbeditc2/widgets/search_panel.py
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
@@ -19,10 +18,12 @@ class SearchPanel(QWidget):
 
     Provides:
     - Search text field
-    - Collection scope selector
-    - Semantic field selector
+    - Collection scope selector (display only for now)
+    - Semantic field selector (locked to Alias for now)
 
-    Emits search intent only.
+    Emits:
+    - searchTextChanged(str)
+    - searchSubmitted(str)
     """
 
     searchTextChanged = Signal(str)
@@ -48,32 +49,59 @@ class SearchPanel(QWidget):
         layout.addWidget(self._field_combo)
 
         self._populate_collections()
+        self._populate_fields()
 
-        self._search_edit.textChanged.connect(self.searchTextChanged)
+        # --- Signal wiring ---
+        self._search_edit.textChanged.connect(
+            self.searchTextChanged.emit
+        )
         self._search_edit.returnPressed.connect(
             lambda: self.searchSubmitted.emit(self._search_edit.text())
         )
 
+    # ------------------------------------------------------------------
+
     def _populate_collections(self) -> None:
+        """
+        Populate collection selector (display-only for now).
+        """
         self._collection_combo.clear()
         for kind in CollectionKind:
-            self._collection_combo.addItem(kind.name.replace("_", " ").title(), kind)
+            self._collection_combo.addItem(
+                kind.name.replace("_", " ").title(),
+                kind,
+            )
+
+        # 🔒 Collection selection is driven elsewhere (NavigationTree)
+        self._collection_combo.setEnabled(False)
+
+    def _populate_fields(self) -> None:
+        """
+        Populate semantic lookup fields.
+
+        For now:
+        - Alias is the only supported lookup mode
+        - Other modes are shown but disabled
+        """
+        self._field_combo.clear()
+        self._field_combo.addItem("Alias")
+
+        # Future (not yet implemented)
+        self._field_combo.addItem("OSM ID")
+        self._field_combo.addItem("Wikidata")
+
+        self._field_combo.setCurrentIndex(0)
+        self._field_combo.setEnabled(False)
+
+    # ------------------------------------------------------------------
 
     def set_collection(self, kind: CollectionKind) -> None:
         """
-        Set the current collection scope.
+        Set the current collection scope (visual only).
         """
         index = self._collection_combo.findData(kind)
         if index >= 0:
             self._collection_combo.setCurrentIndex(index)
-
-    def set_search_fields(self, fields: list[str]) -> None:
-        """
-        Populate the semantic field selector.
-        """
-        self._field_combo.clear()
-        for field in fields:
-            self._field_combo.addItem(field)
 
     def clear(self) -> None:
         """
