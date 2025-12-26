@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from typing import Set
 
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -15,7 +16,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
 )
-
 from PySide6.QtCore import Qt
 
 from sitrepc2.config.paths import gazetteer_path
@@ -31,7 +31,9 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("dbeditc2 — alias & location editor")
         self._db_path = gazetteer_path()
-        self._current_location_id: int | None = None
+
+        # ---- selection state ----
+        self._selected_location_ids: Set[int] = set()
 
         # --------------------------------------------------
         # Search widgets
@@ -48,7 +50,10 @@ class MainWindow(QMainWindow):
         )
 
         self._alias_list = QListWidget(self)
-        self._alias_list.itemClicked.connect(self._on_alias_clicked)
+        self._alias_list.setSelectionMode(QListWidget.ExtendedSelection)
+        self._alias_list.itemSelectionChanged.connect(
+            self._on_alias_selection_changed
+        )
 
         # --------------------------------------------------
         # Details form
@@ -79,15 +84,14 @@ class MainWindow(QMainWindow):
         form.addRow("Region:", self._lbl_region)
 
         self._save_btn = QPushButton("Save location changes", self)
-        self._save_btn.setEnabled(False)
         self._save_btn.clicked.connect(self._save_location_changes)
         self._details_layout.addWidget(self._save_btn)
 
         # --------------------------------------------------
-        # Alias editor for selected location
+        # Alias editor (always enabled)
         # --------------------------------------------------
 
-        self._details_layout.addWidget(QLabel("Aliases for this location:"))
+        self._details_layout.addWidget(QLabel("Aliases for selected location(s):"))
 
         self._location_aliases = QListWidget(self)
         self._details_layout.addWidget(self._location_aliases)
@@ -107,7 +111,7 @@ class MainWindow(QMainWindow):
         self._alias_remove_btn.clicked.connect(self._remove_alias)
 
         # --------------------------------------------------
-        # Layout wiring
+        # Layout
         # --------------------------------------------------
 
         left = QWidget(self)
@@ -124,29 +128,25 @@ class MainWindow(QMainWindow):
 
         self.statusBar().showMessage("Ready")
 
+        self._set_details_enabled(False)
         self._load_by_alias("")
 
     # --------------------------------------------------
-    # Search logic
+    # Search
     # --------------------------------------------------
 
     def _on_search_changed(self, text: str) -> None:
-        mode = self._lookup_mode.currentText()
-        if mode == "alias":
+        if self._lookup_mode.currentText() == "alias":
             self._load_by_alias(text)
         else:
-            self._load_by_location_field(mode, text)
+            self._load_by_location_field(self._lookup_mode.currentText(), text)
 
     def _load_by_alias(self, text: str) -> None:
         con = sqlite3.connect(self._db_path)
         con.row_factory = sqlite3.Row
         cur = con.cursor()
 
-        if not text:
-            cur.execute(
-                "SELECT location_id, alias FROM location_aliases ORDER BY alias LIMIT 200;"
-            )
-        else:
+        if text:
             cur.execute(
                 """
                 SELECT location_id, alias
@@ -156,6 +156,10 @@ class MainWindow(QMainWindow):
                 LIMIT 200;
                 """,
                 (f"{normalize(text)}%",),
+            )
+        else:
+            cur.execute(
+                "SELECT location_id, alias FROM location_aliases ORDER BY alias LIMIT 200;"
             )
 
         rows = cur.fetchall()
@@ -197,20 +201,35 @@ class MainWindow(QMainWindow):
             self._alias_list.addItem(item)
 
     # --------------------------------------------------
-    # Selection + details
+    # Selection handling
     # --------------------------------------------------
 
-    def _on_alias_clicked(self, item: QListWidgetItem) -> None:
-        location_id = item.data(Qt.UserRole)
-        self._current_location_id = location_id
-        self._load_location()
-        self._load_location_aliases()
-        self._save_btn.setEnabled(True)
+    def _on_alias_selection_changed(self) -> None:
+        items = self._alias_list.selectedItems()
+        self._selected_location_ids = {
+            int(i.data(Qt.UserRole)) for i in items
+        }
 
-    def _load_location(self) -> None:
-        if self._current_location_id is None:
-            return
+        self._location_aliases.clear()
 
+        if len(self._selected_location_ids) == 1:
+            loc_id = next(iter(self._selected_location_ids))
+            self._load_location(loc_id)
+            self._load_location_aliases(loc_id)
+            self._set_details_enabled(True)
+        else:
+            self._clear_location_details()
+            self._set_details_enabled(False)
+
+        self.statusBar().showMessage(
+            f"{len(self._selected_location_ids)} location(s) selected"
+        )
+
+    # --------------------------------------------------
+    # Location loading
+    # --------------------------------------------------
+
+    def _load_location(self, location_id: int) -> None:
         con = sqlite3.connect(self._db_path)
         con.row_factory = sqlite3.Row
         cur = con.cursor()
@@ -221,7 +240,7 @@ class MainWindow(QMainWindow):
             FROM locations
             WHERE location_id = ?;
             """,
-            (self._current_location_id,),
+            (location_id,),
         )
         row = cur.fetchone()
 
@@ -233,16 +252,14 @@ class MainWindow(QMainWindow):
             WHERE lr.location_id = ?
             LIMIT 1;
             """,
-            (self._current_location_id,),
+            (location_id,),
         )
         region_row = cur.fetchone()
-
         con.close()
 
         if not row:
             return
 
-        # Populate form
         self._lbl_location_id.setText(str(row["location_id"]))
         self._lbl_lat.setText(str(row["lat"]))
         self._lbl_lon.setText(str(row["lon"]))
@@ -251,30 +268,23 @@ class MainWindow(QMainWindow):
         self._edit_wikidata.setText(row["wikidata"] or "")
         self._lbl_region.setText(region_row["name"] if region_row else "-")
 
-    # --------------------------------------------------
-    # Alias list for this location
-    # --------------------------------------------------
-
-    def _load_location_aliases(self) -> None:
-        self._location_aliases.clear()
-
+    def _load_location_aliases(self, location_id: int) -> None:
         con = sqlite3.connect(self._db_path)
         cur = con.cursor()
         cur.execute(
             "SELECT alias FROM location_aliases WHERE location_id = ? ORDER BY alias;",
-            (self._current_location_id,),
+            (location_id,),
         )
         for (alias,) in cur.fetchall():
             self._location_aliases.addItem(alias)
-
         con.close()
 
     # --------------------------------------------------
-    # Alias editing
+    # Alias editing (multi-location safe)
     # --------------------------------------------------
 
     def _add_alias(self) -> None:
-        if not self._current_location_id:
+        if not self._selected_location_ids:
             return
 
         alias = self._alias_input.text().strip()
@@ -283,22 +293,31 @@ class MainWindow(QMainWindow):
 
         con = sqlite3.connect(self._db_path)
         cur = con.cursor()
-        cur.execute(
-            """
-            INSERT OR IGNORE INTO location_aliases
-                (location_id, alias, normalized)
-            VALUES (?, ?, ?);
-            """,
-            (self._current_location_id, alias, normalize(alias)),
-        )
+
+        for loc_id in self._selected_location_ids:
+            cur.execute(
+                """
+                INSERT OR IGNORE INTO location_aliases
+                    (location_id, alias, normalized)
+                VALUES (?, ?, ?);
+                """,
+                (loc_id, alias, normalize(alias)),
+            )
+
         con.commit()
         con.close()
 
         self._alias_input.clear()
-        self._load_location_aliases()
+
+        if len(self._selected_location_ids) == 1:
+            self._load_location_aliases(next(iter(self._selected_location_ids)))
+
+        self.statusBar().showMessage(
+            f"Alias added to {len(self._selected_location_ids)} location(s)"
+        )
 
     def _remove_alias(self) -> None:
-        if not self._current_location_id:
+        if not self._selected_location_ids:
             return
 
         items = self._location_aliases.selectedItems()
@@ -306,33 +325,40 @@ class MainWindow(QMainWindow):
             return
 
         alias = items[0].text()
+        norm = normalize(alias)
 
         con = sqlite3.connect(self._db_path)
         cur = con.cursor()
-        cur.execute(
-            """
-            DELETE FROM location_aliases
-            WHERE location_id = ?
-              AND normalized = ?;
-            """,
-            (self._current_location_id, normalize(alias)),
-        )
+
+        for loc_id in self._selected_location_ids:
+            cur.execute(
+                """
+                DELETE FROM location_aliases
+                WHERE location_id = ?
+                  AND normalized = ?;
+                """,
+                (loc_id, norm),
+            )
+
         con.commit()
         con.close()
 
-        self._load_location_aliases()
+        if len(self._selected_location_ids) == 1:
+            self._load_location_aliases(next(iter(self._selected_location_ids)))
+
+        self.statusBar().showMessage(
+            f"Alias removed from {len(self._selected_location_ids)} location(s)"
+        )
 
     # --------------------------------------------------
-    # Save details
+    # Save (single-location only)
     # --------------------------------------------------
 
     def _save_location_changes(self) -> None:
-        if self._current_location_id is None:
+        if len(self._selected_location_ids) != 1:
             return
 
-        new_name = self._edit_name.text().strip() or None
-        new_place = self._edit_place.text().strip() or None
-        new_wikidata = self._edit_wikidata.text().strip() or None
+        location_id = next(iter(self._selected_location_ids))
 
         con = sqlite3.connect(self._db_path)
         cur = con.cursor()
@@ -343,27 +369,43 @@ class MainWindow(QMainWindow):
             SET name = ?, place = ?, wikidata = ?
             WHERE location_id = ?;
             """,
-            (new_name, new_place, new_wikidata, self._current_location_id),
+            (
+                self._edit_name.text().strip() or None,
+                self._edit_place.text().strip() or None,
+                self._edit_wikidata.text().strip() or None,
+                location_id,
+            ),
         )
 
         if cur.rowcount != 1:
             con.rollback()
             con.close()
-            raise RuntimeError(
-                f"Failed to update exactly one row for location_id={self._current_location_id}"
-            )
+            raise RuntimeError("Location update affected unexpected row count")
 
         con.commit()
         con.close()
 
-        # Reload to reflect canonical saved state
-        self._load_location()
+        self._load_location(location_id)
+        self.statusBar().showMessage(f"Saved location {location_id}")
 
-        # Defocus edits
-        self._edit_name.clearFocus()
-        self._edit_place.clearFocus()
-        self._edit_wikidata.clearFocus()
+    # --------------------------------------------------
+    # Helpers
+    # --------------------------------------------------
 
-        self.statusBar().showMessage(
-            f"Saved details for location_id={self._current_location_id}"
-        )
+    def _clear_location_details(self) -> None:
+        self._lbl_location_id.setText("-")
+        self._lbl_lat.setText("-")
+        self._lbl_lon.setText("-")
+        self._edit_name.clear()
+        self._edit_place.clear()
+        self._edit_wikidata.clear()
+        self._lbl_region.setText("-")
+
+    def _set_details_enabled(self, enabled: bool) -> None:
+        for w in (
+            self._edit_name,
+            self._edit_place,
+            self._edit_wikidata,
+            self._save_btn,
+        ):
+            w.setEnabled(enabled)
