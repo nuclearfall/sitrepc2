@@ -1,4 +1,3 @@
-# src/dbeditc2/main_window.py
 from __future__ import annotations
 
 import sqlite3
@@ -11,50 +10,43 @@ from PySide6.QtWidgets import (
     QSplitter,
 )
 
-from dbeditc2.enums import CollectionKind, EditorMode
+from PySide6.QtCore import Qt
+
 from dbeditc2.widgets.app_toolbar import AppToolBar
 from dbeditc2.widgets.navigation_tree import NavigationTree
 from dbeditc2.widgets.search_panel import SearchPanel
 from dbeditc2.widgets.entry_list_view import EntryListView
 from dbeditc2.widgets.entry_details_stack import EntryDetailsStack
+from dbeditc2.models import EntrySummary
 
 from sitrepc2.config.paths import gazetteer_path
 
 
 class MainWindow(QMainWindow):
     """
-    Main application window.
-
-    Owns layout and structural wiring only.
-    Business logic and state management are delegated elsewhere.
+    DEBUG MODE:
+    Search box directly queries location_aliases
+    and dumps results into EntryListView.
     """
 
     def __init__(self) -> None:
         super().__init__()
 
-        self.setWindowTitle("dbeditc2")
+        self.setWindowTitle("dbeditc2 — DEBUG alias browser")
 
         # ------------------------------------------------------------
-        # HARD DEBUG: verify gazetteer + alias table visibility
+        # Verify DB
         # ------------------------------------------------------------
-        db_path = gazetteer_path()
-        print(f"[DEBUG] gazetteer_path() = {db_path}")
+        self._db_path = gazetteer_path()
+        print(f"[DEBUG] gazetteer_path() = {self._db_path}")
 
-        try:
-            con = sqlite3.connect(db_path)
-            cur = con.cursor()
-            cur.execute("SELECT COUNT(*) FROM location_aliases;")
-            count = cur.fetchone()[0]
-            con.close()
-        except Exception as e:
-            raise RuntimeError(
-                "FAILED to read location_aliases from gazetteer.db"
-            ) from e
+        con = sqlite3.connect(self._db_path)
+        cur = con.cursor()
+        cur.execute("SELECT COUNT(*) FROM location_aliases;")
+        print(f"[DEBUG] location_aliases row count = {cur.fetchone()[0]}")
+        con.close()
 
-        print(f"[DEBUG] location_aliases row count = {count}")
-        # ------------------------------------------------------------
-
-        # --- Toolbar ---
+        # --- Toolbar (unused here) ---
         self._toolbar = AppToolBar(self)
         self.addToolBar(self._toolbar)
 
@@ -64,13 +56,13 @@ class MainWindow(QMainWindow):
         self._entry_list = EntryListView(self)
         self._details_stack = EntryDetailsStack(self)
 
-        # --- Left panel (navigation) ---
+        # --- Left panel ---
         left_panel = QWidget(self)
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.addWidget(self._navigation_tree)
 
-        # --- Center panel (search + list) ---
+        # --- Center panel ---
         center_panel = QWidget(self)
         center_layout = QVBoxLayout(center_panel)
         center_layout.setContentsMargins(0, 0, 0, 0)
@@ -78,50 +70,69 @@ class MainWindow(QMainWindow):
         center_layout.addWidget(self._entry_list)
 
         # --- Splitters ---
-        main_splitter = QSplitter(self)
-        main_splitter.addWidget(left_panel)
-        main_splitter.addWidget(center_panel)
-        main_splitter.addWidget(self._details_stack)
-        main_splitter.setStretchFactor(1, 1)
-        main_splitter.setStretchFactor(2, 2)
+        splitter = QSplitter(self)
+        splitter.addWidget(left_panel)
+        splitter.addWidget(center_panel)
+        splitter.addWidget(self._details_stack)
+        splitter.setStretchFactor(1, 1)
+        splitter.setStretchFactor(2, 2)
 
-        # --- Central widget ---
         central = QWidget(self)
         central_layout = QHBoxLayout(central)
         central_layout.setContentsMargins(0, 0, 0, 0)
-        central_layout.addWidget(main_splitter)
-
+        central_layout.addWidget(splitter)
         self.setCentralWidget(central)
 
-        # --- Structural signal wiring (no logic) ---
-        self._navigation_tree.collectionSelected.connect(
-            self._on_collection_selected
+        # ------------------------------------------------------------
+        # HARD WIRED DEBUG SEARCH
+        # ------------------------------------------------------------
+        self._search_panel._search_edit.textChanged.connect(
+            self._debug_search_location_aliases
         )
 
     # ------------------------------------------------------------------
-    # Structural API (no logic)
+    # DEBUG SEARCH IMPLEMENTATION
     # ------------------------------------------------------------------
 
-    def set_collection(self, kind: CollectionKind) -> None:
-        self._navigation_tree.set_current(kind)
-        self._search_panel.set_collection(kind)
+    def _debug_search_location_aliases(self, text: str) -> None:
+        text = text.strip().lower()
 
-    def set_editor_mode(self, mode: EditorMode) -> None:
-        self._toolbar.set_mode(mode)
+        con = sqlite3.connect(self._db_path)
+        con.row_factory = sqlite3.Row
+        cur = con.cursor()
 
-    def clear_selection(self) -> None:
-        self._entry_list.clear()
-        self._details_stack.show_empty()
+        if not text:
+            cur.execute(
+                """
+                SELECT location_id, alias
+                FROM location_aliases
+                ORDER BY alias
+                LIMIT 200
+                """
+            )
+        else:
+            cur.execute(
+                """
+                SELECT location_id, alias
+                FROM location_aliases
+                WHERE normalized LIKE ?
+                ORDER BY alias
+                LIMIT 200
+                """,
+                (f"{text}%",),
+            )
 
-    def show_status_message(self, text: str) -> None:
-        self.statusBar().showMessage(text)
+        rows = cur.fetchall()
+        con.close()
 
-    # ------------------------------------------------------------------
-    # Temporary placeholder slot
-    # ------------------------------------------------------------------
+        entries = [
+            EntrySummary(
+                entry_id=row["location_id"],
+                display_name=row["alias"],
+                editable=False,
+            )
+            for row in rows
+        ]
 
-    def _on_collection_selected(self, kind: CollectionKind) -> None:
-        """
-        Placeholder slot to demonstrate structural connectivity.
-        """
-        self._details_stack.show_empty()
+        print(f"[DEBUG] displaying {len(entries)} aliases")
+        self._entry_list.set_entries(entries)

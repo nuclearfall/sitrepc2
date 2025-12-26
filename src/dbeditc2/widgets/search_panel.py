@@ -77,7 +77,7 @@ class SearchPanel(QWidget):
 
     def _populate_fields(self) -> None:
         """
-        Populate semantic lookup fields.
+       Populate semantic lookup fields.
 
         For now:
         - Alias is the only supported lookup mode
