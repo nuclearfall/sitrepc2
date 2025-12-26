@@ -26,12 +26,7 @@ def normalize(text: str) -> str:
 
 class MainWindow(QMainWindow):
     """
-    Alias / ID lookup with alias editing.
-
-    - Search + lookup mode
-    - Alias result list
-    - Location details
-    - Alias add/remove for selected location
+    Alias / ID lookup with alias editing and region display.
     """
 
     def __init__(self) -> None:
@@ -73,8 +68,14 @@ class MainWindow(QMainWindow):
             self._detail_labels[field] = lbl
             self._details_layout.addWidget(lbl)
 
+        # --- Regions display (NEW) ---
+        self._details_layout.addWidget(QLabel("Regions:"))
+        self._regions_list = QListWidget(self)
+        self._regions_list.setMaximumHeight(80)
+        self._details_layout.addWidget(self._regions_list)
+
         # --------------------------------------------------
-        # Alias editor (per-location)
+        # Alias editor
         # --------------------------------------------------
 
         self._details_layout.addWidget(QLabel("Aliases for this location:"))
@@ -113,12 +114,11 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(central)
 
-        # Initial load
         self._load_by_alias("")
 
-    # ------------------------------------------------------
-    # Search dispatch
-    # ------------------------------------------------------
+    # --------------------------------------------------
+    # Search
+    # --------------------------------------------------
 
     def _on_search_changed(self, text: str) -> None:
         mode = self._lookup_mode.currentText()
@@ -184,13 +184,14 @@ class MainWindow(QMainWindow):
             item.setData(Qt.UserRole, r["location_id"])
             self._alias_list.addItem(item)
 
-    # ------------------------------------------------------
-    # Location selection
-    # ------------------------------------------------------
+    # --------------------------------------------------
+    # Selection
+    # --------------------------------------------------
 
     def _on_alias_clicked(self, item: QListWidgetItem) -> None:
         self._current_location_id = item.data(Qt.UserRole)
         self._load_location_details()
+        self._load_location_regions()   # NEW
         self._load_location_aliases()
 
     def _load_location_details(self) -> None:
@@ -215,6 +216,37 @@ class MainWindow(QMainWindow):
         for k in self._detail_labels:
             self._detail_labels[k].setText(f"{k}: {row[k]}")
 
+    # --------------------------------------------------
+    # Regions (NEW)
+    # --------------------------------------------------
+
+    def _load_location_regions(self) -> None:
+        self._regions_list.clear()
+
+        con = sqlite3.connect(self._db_path)
+        cur = con.cursor()
+
+        cur.execute(
+            """
+            SELECT r.name
+            FROM location_regions lr
+            JOIN regions r
+              ON r.region_id = lr.region_id
+            WHERE lr.location_id = ?
+            ORDER BY r.name;
+            """,
+            (self._current_location_id,),
+        )
+
+        for (name,) in cur.fetchall():
+            self._regions_list.addItem(name)
+
+        con.close()
+
+    # --------------------------------------------------
+    # Aliases
+    # --------------------------------------------------
+
     def _load_location_aliases(self) -> None:
         self._location_aliases.clear()
 
@@ -224,15 +256,9 @@ class MainWindow(QMainWindow):
             "SELECT alias FROM location_aliases WHERE location_id = ? ORDER BY alias;",
             (self._current_location_id,),
         )
-        rows = cur.fetchall()
-        con.close()
-
-        for (alias,) in rows:
+        for (alias,) in cur.fetchall():
             self._location_aliases.addItem(alias)
-
-    # ------------------------------------------------------
-    # Alias editing
-    # ------------------------------------------------------
+        con.close()
 
     def _add_alias(self) -> None:
         if not self._current_location_id:
@@ -267,6 +293,7 @@ class MainWindow(QMainWindow):
             return
 
         alias = items[0].text()
+
         con = sqlite3.connect(self._db_path)
         cur = con.cursor()
         cur.execute(
