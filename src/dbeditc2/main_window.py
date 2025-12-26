@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QLineEdit,
+    QComboBox,
 )
 
 from PySide6.QtCore import Qt
@@ -20,17 +21,18 @@ from sitrepc2.config.paths import gazetteer_path
 
 class MainWindow(QMainWindow):
     """
-    Minimal alias → location viewer with live alias search.
+    Alias / osm_id / wikidata → location viewer.
 
-    - Top: alias search bar
-    - Left: matching aliases (location_aliases)
-    - Right: location details (locations)
+    - Search bar
+    - Lookup mode selector
+    - Alias results list
+    - Location details
     """
 
     def __init__(self) -> None:
         super().__init__()
 
-        self.setWindowTitle("dbeditc2 — alias search → location")
+        self.setWindowTitle("dbeditc2 — alias / id lookup")
 
         self._db_path = gazetteer_path()
         print(f"[DEBUG] gazetteer_path = {self._db_path}")
@@ -40,8 +42,15 @@ class MainWindow(QMainWindow):
         # --------------------------------------------------
 
         self._search_edit = QLineEdit(self)
-        self._search_edit.setPlaceholderText("Search aliases…")
+        self._search_edit.setPlaceholderText("Search…")
         self._search_edit.textChanged.connect(self._on_search_changed)
+
+        self._lookup_mode = QComboBox(self)
+        self._lookup_mode.addItems(["alias", "wikidata"])
+        self._lookup_mode.setCurrentText("alias")
+        self._lookup_mode.currentTextChanged.connect(
+            lambda _: self._on_search_changed(self._search_edit.text())
+        )
 
         self._alias_list = QListWidget(self)
         self._alias_list.itemClicked.connect(self._on_alias_clicked)
@@ -63,6 +72,7 @@ class MainWindow(QMainWindow):
         left_panel = QWidget(self)
         left_layout = QVBoxLayout(left_panel)
         left_layout.addWidget(self._search_edit)
+        left_layout.addWidget(self._lookup_mode)
         left_layout.addWidget(self._alias_list)
 
         central = QWidget(self)
@@ -76,16 +86,27 @@ class MainWindow(QMainWindow):
         # Initial load
         # --------------------------------------------------
 
-        self._load_aliases(search_text="")
+        self._load_by_alias(search_text="")
 
     # ------------------------------------------------------
-    # Data loading
+    # Search dispatch
     # ------------------------------------------------------
 
-    def _load_aliases(self, *, search_text: str) -> None:
-        """
-        Load aliases constrained by search_text.
-        """
+    def _on_search_changed(self, text: str) -> None:
+        mode = self._lookup_mode.currentText()
+
+        if mode == "alias":
+            self._load_by_alias(text)
+        elif mode == "wikidata":
+            self._load_by_location_field("wikidata", text)
+        else:
+            raise RuntimeError(f"Unknown lookup mode: {mode}")
+
+    # ------------------------------------------------------
+    # Alias-based lookup
+    # ------------------------------------------------------
+
+    def _load_by_alias(self, search_text: str) -> None:
         con = sqlite3.connect(self._db_path)
         con.row_factory = sqlite3.Row
         cur = con.cursor()
@@ -115,7 +136,50 @@ class MainWindow(QMainWindow):
         rows = cur.fetchall()
         con.close()
 
-        print(f"[DEBUG] loaded {len(rows)} aliases for search={search_text!r}")
+        self._populate_alias_list(rows)
+
+    # ------------------------------------------------------
+    # Location-table lookup (osm_id / wikidata)
+    # ------------------------------------------------------
+
+    def _load_by_location_field(self, field: str, value: str) -> None:
+        if not value:
+            self._alias_list.clear()
+            return
+
+        con = sqlite3.connect(self._db_path)
+        con.row_factory = sqlite3.Row
+        cur = con.cursor()
+
+        try:
+            cur.execute(
+                f"""
+                SELECT la.location_id, la.alias
+                FROM locations l
+                JOIN location_aliases la
+                  ON la.location_id = l.location_id
+                WHERE l.{field} = ?
+                ORDER BY la.alias
+                LIMIT 200;
+                """,
+                (value,),
+            )
+        except sqlite3.OperationalError as e:
+            raise RuntimeError(
+                f"locations.{field} does not exist in schema"
+            ) from e
+
+        rows = cur.fetchall()
+        con.close()
+
+        self._populate_alias_list(rows)
+
+    # ------------------------------------------------------
+    # UI population
+    # ------------------------------------------------------
+
+    def _populate_alias_list(self, rows: list[sqlite3.Row]) -> None:
+        print(f"[DEBUG] displaying {len(rows)} aliases")
 
         self._alias_list.clear()
         for row in rows:
@@ -127,12 +191,8 @@ class MainWindow(QMainWindow):
     # Interaction
     # ------------------------------------------------------
 
-    def _on_search_changed(self, text: str) -> None:
-        self._load_aliases(search_text=text)
-
     def _on_alias_clicked(self, item: QListWidgetItem) -> None:
         location_id = item.data(Qt.UserRole)
-        print(f"[DEBUG] alias clicked → location_id={location_id}")
 
         con = sqlite3.connect(self._db_path)
         con.row_factory = sqlite3.Row
@@ -173,142 +233,3 @@ class MainWindow(QMainWindow):
     def _show_message(self, text: str) -> None:
         for lbl in self._detail_labels.values():
             lbl.setText(text)
-
-# from __future__ import annotations
-
-# import sqlite3
-
-# from PySide6.QtWidgets import (
-#     QMainWindow,
-#     QWidget,
-#     QVBoxLayout,
-#     QHBoxLayout,
-#     QSplitter,
-# )
-
-# from PySide6.QtCore import Qt
-
-# from dbeditc2.widgets.app_toolbar import AppToolBar
-# from dbeditc2.widgets.navigation_tree import NavigationTree
-# from dbeditc2.widgets.search_panel import SearchPanel
-# from dbeditc2.widgets.entry_list_view import EntryListView
-# from dbeditc2.widgets.entry_details_stack import EntryDetailsStack
-# from dbeditc2.models import EntrySummary
-
-# from sitrepc2.config.paths import gazetteer_path
-
-
-# class MainWindow(QMainWindow):
-#     """
-#     DEBUG MODE:
-#     Search box directly queries location_aliases
-#     and dumps results into EntryListView.
-#     """
-
-#     def __init__(self) -> None:
-#         super().__init__()
-
-#         self.setWindowTitle("dbeditc2 — DEBUG alias browser")
-
-#         # ------------------------------------------------------------
-#         # Verify DB
-#         # ------------------------------------------------------------
-#         self._db_path = gazetteer_path()
-#         print(f"[DEBUG] gazetteer_path() = {self._db_path}")
-
-#         con = sqlite3.connect(self._db_path)
-#         cur = con.cursor()
-#         cur.execute("SELECT COUNT(*) FROM location_aliases;")
-#         print(f"[DEBUG] location_aliases row count = {cur.fetchone()[0]}")
-#         con.close()
-
-#         # --- Toolbar (unused here) ---
-#         self._toolbar = AppToolBar(self)
-#         self.addToolBar(self._toolbar)
-
-#         # --- Core widgets ---
-#         self._navigation_tree = NavigationTree(self)
-#         self._search_panel = SearchPanel(self)
-#         self._entry_list = EntryListView(self)
-#         self._details_stack = EntryDetailsStack(self)
-
-#         # --- Left panel ---
-#         left_panel = QWidget(self)
-#         left_layout = QVBoxLayout(left_panel)
-#         left_layout.setContentsMargins(0, 0, 0, 0)
-#         left_layout.addWidget(self._navigation_tree)
-
-#         # --- Center panel ---
-#         center_panel = QWidget(self)
-#         center_layout = QVBoxLayout(center_panel)
-#         center_layout.setContentsMargins(0, 0, 0, 0)
-#         center_layout.addWidget(self._search_panel)
-#         center_layout.addWidget(self._entry_list)
-
-#         # --- Splitters ---
-#         splitter = QSplitter(self)
-#         splitter.addWidget(left_panel)
-#         splitter.addWidget(center_panel)
-#         splitter.addWidget(self._details_stack)
-#         splitter.setStretchFactor(1, 1)
-#         splitter.setStretchFactor(2, 2)
-
-#         central = QWidget(self)
-#         central_layout = QHBoxLayout(central)
-#         central_layout.setContentsMargins(0, 0, 0, 0)
-#         central_layout.addWidget(splitter)
-#         self.setCentralWidget(central)
-
-#         # ------------------------------------------------------------
-#         # HARD WIRED DEBUG SEARCH
-#         # ------------------------------------------------------------
-#         self._search_panel._search_edit.textChanged.connect(
-#             self._debug_search_location_aliases
-#         )
-
-#     # ------------------------------------------------------------------
-#     # DEBUG SEARCH IMPLEMENTATION
-#     # ------------------------------------------------------------------
-
-#     def _debug_search_location_aliases(self, text: str) -> None:
-#         text = text.strip().lower()
-
-#         con = sqlite3.connect(self._db_path)
-#         con.row_factory = sqlite3.Row
-#         cur = con.cursor()
-
-#         if not text:
-#             cur.execute(
-#                 """
-#                 SELECT location_id, alias
-#                 FROM location_aliases
-#                 ORDER BY alias
-#                 LIMIT 200
-#                 """
-#             )
-#         else:
-#             cur.execute(
-#                 """
-#                 SELECT location_id, alias
-#                 FROM location_aliases
-#                 WHERE normalized LIKE ?
-#                 ORDER BY alias
-#                 LIMIT 200
-#                 """,
-#                 (f"{text}%",),
-#             )
-
-#         rows = cur.fetchall()
-#         con.close()
-
-#         entries = [
-#             EntrySummary(
-#                 entry_id=row["location_id"],
-#                 display_name=row["alias"],
-#                 editable=False,
-#             )
-#             for row in rows
-#         ]
-
-#         print(f"[DEBUG] displaying {len(entries)} aliases")
-#         self._entry_list.set_entries(entries)
