@@ -14,7 +14,7 @@ SOURCE_DIR = "sitrepc2"
 
 # Seed filenames (packaged)
 SEED_GAZETTEER_DB = "seed_gazetteer.db"
-SEED_LEXICON = "seed_lexicon.json"
+SEED_LEXICON = "seed_lexicon.db"
 SEED_SOURCES = "seed_sources.jsonl"
 
 # Workspace filenames
