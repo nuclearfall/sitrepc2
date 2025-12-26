@@ -4,53 +4,146 @@ import sqlite3
 
 from PySide6.QtWidgets import (
     QMainWindow,
+    QWidget,
     QListWidget,
     QListWidgetItem,
+    QLabel,
+    QVBoxLayout,
+    QHBoxLayout,
 )
+
+from PySide6.QtCore import Qt
 
 from sitrepc2.config.paths import gazetteer_path
 
 
 class MainWindow(QMainWindow):
     """
-    Absolute minimal window.
+    Minimal alias → location viewer.
 
-    On startup:
-    - Opens gazetteer.db
-    - Runs: SELECT * FROM location_aliases LIMIT 200;
-    - Displays results in a list
+    - Left: location_aliases (LIMIT 200)
+    - Right: locations row for selected location_id
     """
 
     def __init__(self) -> None:
         super().__init__()
 
-        self.setWindowTitle("dbeditc2 — minimal alias dump")
+        self.setWindowTitle("dbeditc2 — alias → location debug")
 
-        self._list = QListWidget(self)
-        self.setCentralWidget(self._list)
+        self._db_path = gazetteer_path()
+        print(f"[DEBUG] gazetteer_path = {self._db_path}")
+
+        # --------------------------------------------------
+        # Widgets
+        # --------------------------------------------------
+
+        self._alias_list = QListWidget(self)
+        self._alias_list.itemClicked.connect(self._on_alias_clicked)
+
+        self._details_widget = QWidget(self)
+        self._details_layout = QVBoxLayout(self._details_widget)
+        self._details_layout.setAlignment(Qt.AlignTop)
+
+        self._detail_labels: dict[str, QLabel] = {}
+        for field in ("location_id", "name", "lat", "lon", "place", "wikidata"):
+            lbl = QLabel("-", self)
+            self._detail_labels[field] = lbl
+            self._details_layout.addWidget(lbl)
+
+        # --------------------------------------------------
+        # Layout
+        # --------------------------------------------------
+
+        central = QWidget(self)
+        layout = QHBoxLayout(central)
+        layout.addWidget(self._alias_list, stretch=1)
+        layout.addWidget(self._details_widget, stretch=1)
+
+        self.setCentralWidget(central)
+
+        # --------------------------------------------------
+        # Load initial data
+        # --------------------------------------------------
 
         self._load_aliases()
 
-    def _load_aliases(self) -> None:
-        db_path = gazetteer_path()
-        print(f"[DEBUG] gazetteer_path = {db_path}")
+    # ------------------------------------------------------
+    # Data loading
+    # ------------------------------------------------------
 
-        con = sqlite3.connect(db_path)
+    def _load_aliases(self) -> None:
+        con = sqlite3.connect(self._db_path)
         con.row_factory = sqlite3.Row
         cur = con.cursor()
 
         cur.execute(
-            "SELECT location_id, alias, normalized FROM location_aliases LIMIT 200;"
+            """
+            SELECT location_id, alias
+            FROM location_aliases
+            ORDER BY alias
+            LIMIT 200;
+            """
         )
+
         rows = cur.fetchall()
         con.close()
 
-        print(f"[DEBUG] fetched {len(rows)} rows")
+        print(f"[DEBUG] loaded {len(rows)} aliases")
 
+        self._alias_list.clear()
         for row in rows:
-            text = f"{row['alias']}  (loc_id={row['location_id']})"
+            text = row["alias"]
             item = QListWidgetItem(text)
-            self._list.addItem(item)
+            item.setData(Qt.UserRole, row["location_id"])
+            self._alias_list.addItem(item)
+
+    # ------------------------------------------------------
+    # Interaction
+    # ------------------------------------------------------
+
+    def _on_alias_clicked(self, item: QListWidgetItem) -> None:
+        location_id = item.data(Qt.UserRole)
+        print(f"[DEBUG] alias clicked → location_id={location_id}")
+
+        con = sqlite3.connect(self._db_path)
+        con.row_factory = sqlite3.Row
+        cur = con.cursor()
+
+        cur.execute(
+            """
+            SELECT location_id, name, lat, lon, place, wikidata
+            FROM locations
+            WHERE location_id = ?;
+            """,
+            (location_id,),
+        )
+
+        row = cur.fetchone()
+        con.close()
+
+        if row is None:
+            self._show_message("Location not found")
+            return
+
+        self._update_details(row)
+
+    # ------------------------------------------------------
+    # UI helpers
+    # ------------------------------------------------------
+
+    def _update_details(self, row: sqlite3.Row) -> None:
+        self._detail_labels["location_id"].setText(
+            f"location_id: {row['location_id']}"
+        )
+        self._detail_labels["name"].setText(f"name: {row['name']}")
+        self._detail_labels["lat"].setText(f"lat: {row['lat']}")
+        self._detail_labels["lon"].setText(f"lon: {row['lon']}")
+        self._detail_labels["place"].setText(f"place: {row['place']}")
+        self._detail_labels["wikidata"].setText(f"wikidata: {row['wikidata']}")
+
+    def _show_message(self, text: str) -> None:
+        for lbl in self._detail_labels.values():
+            lbl.setText(text)
 
 # from __future__ import annotations
 
