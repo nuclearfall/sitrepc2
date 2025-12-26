@@ -25,7 +25,7 @@ def main() -> None:
         details=window._details_stack,
         toolbar=window._toolbar,
     )
-    window.set_collection(CollectionKind.LOCATIONS)
+    # window.set_collection(CollectionKind.LOCATIONS)
 
     window.show()
     sys.exit(app.exec())
