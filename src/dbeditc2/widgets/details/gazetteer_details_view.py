@@ -26,6 +26,7 @@ class GazetteerDetailsView(QWidget):
     """
 
     aliasAddRequested = Signal(str)
+    aliasRemoveRequested = Signal(str)
     regionAssignRequested = Signal()
     groupAssignRequested = Signal()
 
@@ -56,6 +57,8 @@ class GazetteerDetailsView(QWidget):
         main_layout.addWidget(QLabel("Aliases:", self))
         self._aliases_list = QListWidget(self)
         main_layout.addWidget(self._aliases_list)
+        self._aliases_list.setSelectionMode(QListWidget.SingleSelection)
+
 
         alias_controls = QHBoxLayout()
         self._alias_input = QLineEdit(self)
@@ -69,6 +72,8 @@ class GazetteerDetailsView(QWidget):
         self._alias_add_btn.clicked.connect(
             lambda: self.aliasAddRequested.emit(self._alias_input.text())
         )
+        self._alias_remove_btn = QPushButton("Remove", self)
+        self._alias_remove_btn.clicked.connect(self._on_remove_alias)
 
         # --- Regions ---
         main_layout.addWidget(QLabel("Regions:", self))
@@ -148,3 +153,9 @@ class GazetteerDetailsView(QWidget):
         self._aliases_list.clear()
         self._regions_list.clear()
         self._groups_list.clear()
+
+    def _on_remove_alias(self):
+        items = self._aliases_list.selectedItems()
+        if items:
+            self.aliasRemoveRequested.emit(items[0].text())
+
