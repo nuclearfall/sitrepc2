@@ -2,11 +2,9 @@
 from __future__ import annotations
 
 from dbeditc2.enums import CollectionKind, EditorMode
-from dbeditc2.services.gazetteer_read import (
-    list_entities,
-    load_entity,
-)
-from dbeditc2.services.gazetteer_search import search_entities
+from dbeditc2.services.gazetteer_read import load_entity
+from dbeditc2.services.gazetteer_search import _DOMAIN_FOR_COLLECTION
+from dbeditc2.services.gazetteer_alias_browser import list_aliases
 from dbeditc2.widgets.entry_details_stack import EntryDetailsStack
 from dbeditc2.widgets.entry_list_view import EntryListView
 from dbeditc2.widgets.navigation_tree import NavigationTree
@@ -14,8 +12,6 @@ from dbeditc2.widgets.search_panel import SearchPanel
 from dbeditc2.widgets.app_toolbar import AppToolBar
 
 from sitrepc2.gazetteer.alias_service import apply_alias_changes
-from dbeditc2.services.gazetteer_search import _DOMAIN_FOR_COLLECTION
-from dbeditc2.services.gazetteer_alias_browser import list_aliases
 
 
 class EditorController:
@@ -23,10 +19,10 @@ class EditorController:
     Controller for Gazetteer browsing with alias editing support.
 
     Responsibilities:
-    - Load entity lists
-    - Load entity details
-    - Track alias edit deltas
-    - Apply alias changes via sitrepc2 services
+    - Browse aliases (alias-first)
+    - Resolve entity from alias
+    - Display entity details
+    - Allow editing of aliases only
 
     Scope:
     - Gazetteer only
@@ -93,16 +89,15 @@ class EditorController:
             entries = list_aliases(kind=kind)
         except Exception as e:
             raise RuntimeError(
-                f"Failed to list aliases for {kind}"
+                f"Failed to list aliases for collection: {kind}"
             ) from e
 
         self._entry_list.set_entries(entries)
         self._details.show_empty()
 
-
     def on_entry_selected(self, entry_id: int) -> None:
         if self._current_collection is None:
-            return
+            raise RuntimeError("Entry selected with no active collection")
 
         entity = load_entity(self._current_collection, entry_id)
 
@@ -116,7 +111,6 @@ class EditorController:
         self._added_aliases.clear()
         self._removed_aliases.clear()
 
-        # Alias editing is the only enabled action for now
         self._toolbar.set_actions_enabled(
             add=False,
             edit=False,
@@ -144,12 +138,6 @@ class EditorController:
 
         self._entry_list.set_entries(entries)
         self._details.show_empty()
-
-
-    def on_search_submitted(self, text: str) -> None:
-        # identical behavior, explicit entry point
-        self.on_search_text_changed(text)
-
 
     def on_search_submitted(self, text: str) -> None:
         self.on_search_text_changed(text)
@@ -197,12 +185,16 @@ class EditorController:
             self._current_entity_id is None
             or self._current_collection is None
         ):
-            return
+            raise RuntimeError("Save requested with no active entity")
 
         if not self._added_aliases and not self._removed_aliases:
-            return
+            return  # explicit no-op
 
-        domain = _DOMAIN_FOR_COLLECTION[self._current_collection]
+        domain = _DOMAIN_FOR_COLLECTION.get(self._current_collection)
+        if domain is None:
+            raise RuntimeError(
+                f"Alias saving not supported for {self._current_collection}"
+            )
 
         apply_alias_changes(
             domain=domain,
@@ -211,11 +203,11 @@ class EditorController:
             removed=self._removed_aliases,
         )
 
-        # Reload entity to reflect canonical state
+        # Reload canonical state
         self.on_entry_selected(self._current_entity_id)
 
     def on_cancel_aliases(self) -> None:
         if self._current_entity_id is None:
-            return
+            raise RuntimeError("Cancel requested with no active entity")
 
         self.on_entry_selected(self._current_entity_id)
