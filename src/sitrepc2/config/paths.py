@@ -20,7 +20,7 @@ SEED_SOURCES = "seed_sources.jsonl"
 # Workspace filenames
 GAZETTEER_DB = "gazetteer.db"
 RECORDS_DB = "records.db"
-LEXICON = "lexicon.json"
+LEXICON = "lexicon.db"
 SOURCES = "sources.jsonl"
 
 # Schema filenames

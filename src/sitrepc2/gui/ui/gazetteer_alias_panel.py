@@ -67,6 +67,7 @@ class GazetteerAliasPanel(QWidget):
         list,                                     # added_aliases
         list,                                     # removed_aliases
     )
+    addAliasRequested = Signal(str)
 
     # ------------------------------------------------------------------
 
@@ -170,16 +171,16 @@ class GazetteerAliasPanel(QWidget):
         layout.addWidget(self.results_list)
 
         # --------------------------------------------------
-        # Edit aliases button
+        # Alias editing
         # --------------------------------------------------
+
+        self.add_alias_btn = QPushButton("Add Alias from Selection")
+        self.add_alias_btn.setVisible(False)
+        layout.addWidget(self.add_alias_btn)
 
         self.edit_aliases_btn = QPushButton("Edit Aliases…")
         self.edit_aliases_btn.setEnabled(False)
         layout.addWidget(self.edit_aliases_btn)
-
-        # --------------------------------------------------
-        # Alias editor (hidden)
-        # --------------------------------------------------
 
         self.alias_editor = QTextEdit()
         self.alias_editor.setPlaceholderText(
@@ -189,10 +190,6 @@ class GazetteerAliasPanel(QWidget):
         self.alias_editor.setVisible(False)
         self.alias_editor.setMinimumHeight(120)
         layout.addWidget(self.alias_editor)
-
-        # --------------------------------------------------
-        # Alias editor buttons
-        # --------------------------------------------------
 
         btn_layout = QHBoxLayout()
         self.alias_apply_btn = QPushButton("Apply")
@@ -239,6 +236,10 @@ class GazetteerAliasPanel(QWidget):
         self.alias_cancel_btn.clicked.connect(
             self._on_alias_cancel_clicked
         )
+        self.add_alias_btn.clicked.connect(
+            self._on_add_alias_clicked
+        )
+
 
     # ------------------------------------------------------------------
     # Domain & search handling
@@ -376,6 +377,10 @@ class GazetteerAliasPanel(QWidget):
         self._original_aliases.clear()
         self._current_aliases.clear()
 
+    def _on_add_alias_clicked(self) -> None:
+        if self._pending_alias_text:
+            self.addAliasRequested.emit(self._pending_alias_text)
+            
     # ------------------------------------------------------------------
     # Public UI API
     # ------------------------------------------------------------------
@@ -413,3 +418,10 @@ class GazetteerAliasPanel(QWidget):
             self.alias_editor.setPlainText(
                 "\n".join(sorted(aliases))
             )
+
+    def set_pending_alias(self, text: Optional[str]) -> None:
+        self._pending_alias_text = text.strip() if text else None
+        self.add_alias_btn.setVisible(
+            bool(self._pending_alias_text and self._selected_rows)
+        )
+

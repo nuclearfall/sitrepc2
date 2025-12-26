@@ -15,7 +15,7 @@ from sitrepc2.lss.phrases import register_search_phrases
 from sitrepc2.lss.ruler import add_entity_rulers_from_db
 from sitrepc2.lss.sectioning import split_into_sections
 from sitrepc2.lss.events import (
-    compute_doc_span_from_raw_word_matches,
+    compute_doc_span_from_phrase_match,
     build_lss_events,
 )
 from sitrepc2.lss.persist import (
@@ -53,6 +53,7 @@ def run_lss_pipeline(
     batch_size: int = 8,
     min_similarity: float = 0.0,
     reprocess: bool = False,
+    keep_nonspatial: bool = False,
 ) -> None:
     if not ingest_posts:
         return
@@ -140,7 +141,7 @@ def run_lss_pipeline(
                 if similarity < min_similarity:
                     continue
 
-                start, end = compute_doc_span_from_raw_word_matches(raw)
+                start, end = compute_doc_span_from_phrase_match(raw)
                 text = raw.get("sentences_within_document") or doc[start:end].text
 
                 event_matches.append(
@@ -160,14 +161,14 @@ def run_lss_pipeline(
                     )
                 )
 
-
             # -------------------------
             # Structural scoping + validation
             # -------------------------
 
-            lss_events = build_lss_events(
+            lss_events, rejected_nonspatial = build_lss_events(
                 doc=doc,
                 event_matches=event_matches,
+                collect_nonspatial=keep_nonspatial,
             )
 
             # If the post produces no valid events → skip entirely
@@ -182,7 +183,7 @@ def run_lss_pipeline(
             sections = split_into_sections(post["text"])
             section_id_by_ordinal: dict[int, int] = {}
 
-            # Temporary assumption: all events in section 0
+            # Current invariant: all events in section 0
             used_section_ordinals = {0}
 
             for sec in sections:

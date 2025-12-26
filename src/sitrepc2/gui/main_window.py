@@ -99,6 +99,10 @@ class MainWindow(QMainWindow):
             self._on_aliases_committed
         )
 
+        self.viewer.selectedTextChanged.connect(self._on_viewer_text_selected)
+        self.alias_panel.addAliasRequested.connect(self._on_add_alias_requested)
+        self.alias_panel.selectionChanged.connect(self._on_gazetteer_selection_changed)
+
         # Right dock: inspection
         self.summary_panel = DocumentSummaryPanel(self)
         self.attr_panel = AttributeInspector(self)
@@ -274,3 +278,26 @@ class MainWindow(QMainWindow):
         else:
             self.toolbar.set_current_label(None)
             self.attr_panel.set_token(token)
+
+    def _on_viewer_text_selected(self, text: str) -> None:
+        self._pending_alias_text = text or None
+        self.alias_panel.set_pending_alias(self._pending_alias_text)
+
+    def _on_gazetteer_selection_changed(self, rows) -> None:
+        self.alias_panel.set_pending_alias(self._pending_alias_text)
+
+    def _on_add_alias_requested(self, alias_text: str) -> None:
+        rows = self.alias_panel._selected_rows
+        if not rows:
+            return
+
+        apply_alias_changes(
+            domain=rows[0].domain,
+            entity_ids=[r.entity_id for r in rows],
+            added=[alias_text],
+            removed=[],
+        )
+
+        self.controller.reload_rulers_and_rebuild()
+        self._ensure_label_colors()
+        self._refresh_viewer()

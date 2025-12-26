@@ -96,7 +96,7 @@ def lss_scope_event(
     role_candidates: list[LSSRoleCandidate] = []
 
     for wm in event.iter_content_words():
-        rk = _infer_role_kind_from_word_match(wm)
+        rk = _infer_role_kind_from_pattern_element(wm)
         if rk is None:
             continue
 
@@ -273,7 +273,7 @@ def _spans_overlap(a1: int, a2: int, b1: int, b2: int) -> bool:
     return not (a2 <= b1 or b2 <= a1)
 
 
-def _infer_role_kind_from_word_match(wm: WordMatch) -> str | None:
+def _infer_role_kind_from_pattern_element(wm: WordMatch) -> str | None:
     mt = (wm.match_type or "").lower()
 
     if mt in {"subject", "actor", "object", "dobj", "possessor"}:

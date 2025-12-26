@@ -36,6 +36,11 @@ def extract_callback(
         "--reprocess",
         help="Force reprocessing even if LSS has already completed for a post.",
     ),
+    keep_nonspatial: bool = typer.Option(
+        False,
+        "--keep-nonspatial",
+        help="Retain non-spatial Holmes event matches for audit/debug (not persisted as LSS events).",
+    ),
 ):
     """Select ingested posts and execute the LSS pipeline."""
 
@@ -141,6 +146,8 @@ def extract_callback(
     run_lss_pipeline(
         posts,
         reprocess=reprocess,
+        keep_nonspatial=keep_nonspatial,
     )
+
 
     print("[bold green]LSS extraction complete.[/bold green]")
