@@ -1,6 +1,8 @@
 # src/dbeditc2/main_window.py
 from __future__ import annotations
 
+import sqlite3
+
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -16,6 +18,8 @@ from dbeditc2.widgets.search_panel import SearchPanel
 from dbeditc2.widgets.entry_list_view import EntryListView
 from dbeditc2.widgets.entry_details_stack import EntryDetailsStack
 
+from sitrepc2.config.paths import gazetteer_path
+
 
 class MainWindow(QMainWindow):
     """
@@ -29,6 +33,26 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.setWindowTitle("dbeditc2")
+
+        # ------------------------------------------------------------
+        # HARD DEBUG: verify gazetteer + alias table visibility
+        # ------------------------------------------------------------
+        db_path = gazetteer_path()
+        print(f"[DEBUG] gazetteer_path() = {db_path}")
+
+        try:
+            con = sqlite3.connect(db_path)
+            cur = con.cursor()
+            cur.execute("SELECT COUNT(*) FROM location_aliases;")
+            count = cur.fetchone()[0]
+            con.close()
+        except Exception as e:
+            raise RuntimeError(
+                "FAILED to read location_aliases from gazetteer.db"
+            ) from e
+
+        print(f"[DEBUG] location_aliases row count = {count}")
+        # ------------------------------------------------------------
 
         # --- Toolbar ---
         self._toolbar = AppToolBar(self)
