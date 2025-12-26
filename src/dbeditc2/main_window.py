@@ -51,9 +51,7 @@ class MainWindow(QMainWindow):
 
         self._alias_list = QListWidget(self)
         self._alias_list.setSelectionMode(QListWidget.ExtendedSelection)
-        self._alias_list.itemSelectionChanged.connect(
-            self._on_alias_selection_changed
-        )
+        self._alias_list.itemSelectionChanged.connect(self._on_alias_selection_changed)
 
         # --------------------------------------------------
         # Details form
@@ -88,12 +86,13 @@ class MainWindow(QMainWindow):
         self._details_layout.addWidget(self._save_btn)
 
         # --------------------------------------------------
-        # Alias editor (always enabled)
+        # Alias editor (single + multi select)
         # --------------------------------------------------
 
         self._details_layout.addWidget(QLabel("Aliases for selected location(s):"))
 
         self._location_aliases = QListWidget(self)
+        self._location_aliases.setSelectionMode(QListWidget.SingleSelection)
         self._details_layout.addWidget(self._location_aliases)
 
         alias_controls = QHBoxLayout()
@@ -136,6 +135,19 @@ class MainWindow(QMainWindow):
     # --------------------------------------------------
 
     def _on_search_changed(self, text: str) -> None:
+        # Clearing/refreshing search results should also clear selection state
+        # because selected items might no longer exist.
+        self._alias_list.blockSignals(True)
+        try:
+            self._alias_list.clearSelection()
+        finally:
+            self._alias_list.blockSignals(False)
+
+        self._selected_location_ids.clear()
+        self._clear_location_details()
+        self._set_details_enabled(False)
+        self._location_aliases.clear()
+
         if self._lookup_mode.currentText() == "alias":
             self._load_by_alias(text)
         else:
@@ -186,7 +198,8 @@ class MainWindow(QMainWindow):
             FROM locations l
             JOIN location_aliases la ON la.location_id = l.location_id
             WHERE l.{field} = ?
-            ORDER BY la.alias;
+            ORDER BY la.alias
+            LIMIT 200;
             """,
             (value,),
         )
@@ -206,24 +219,31 @@ class MainWindow(QMainWindow):
 
     def _on_alias_selection_changed(self) -> None:
         items = self._alias_list.selectedItems()
-        self._selected_location_ids = {
-            int(i.data(Qt.UserRole)) for i in items
-        }
+        self._selected_location_ids = {int(i.data(Qt.UserRole)) for i in items}
 
+        self._refresh_right_panel()
+
+        self.statusBar().showMessage(f"{len(self._selected_location_ids)} location(s) selected")
+
+    def _refresh_right_panel(self) -> None:
+        """
+        Refresh details + alias editor based on current selection.
+        """
         self._location_aliases.clear()
 
         if len(self._selected_location_ids) == 1:
             loc_id = next(iter(self._selected_location_ids))
             self._load_location(loc_id)
-            self._load_location_aliases(loc_id)
             self._set_details_enabled(True)
-        else:
-            self._clear_location_details()
-            self._set_details_enabled(False)
+            self._load_location_aliases_single(loc_id)   # clears + reloads
+            return
 
-        self.statusBar().showMessage(
-            f"{len(self._selected_location_ids)} location(s) selected"
-        )
+        # Multi-select (or none): details blank/disabled, alias editor shows COMMON aliases
+        self._clear_location_details()
+        self._set_details_enabled(False)
+
+        if len(self._selected_location_ids) >= 2:
+            self._load_common_aliases_for_selection()
 
     # --------------------------------------------------
     # Location loading
@@ -268,7 +288,17 @@ class MainWindow(QMainWindow):
         self._edit_wikidata.setText(row["wikidata"] or "")
         self._lbl_region.setText(region_row["name"] if region_row else "-")
 
-    def _load_location_aliases(self, location_id: int) -> None:
+    # --------------------------------------------------
+    # Alias list population
+    # --------------------------------------------------
+
+    def _load_location_aliases_single(self, location_id: int) -> None:
+        """
+        Load ALL aliases for a single location.
+        Always clears first to avoid duplicates.
+        """
+        self._location_aliases.clear()
+
         con = sqlite3.connect(self._db_path)
         cur = con.cursor()
         cur.execute(
@@ -279,8 +309,47 @@ class MainWindow(QMainWindow):
             self._location_aliases.addItem(alias)
         con.close()
 
+    def _load_common_aliases_for_selection(self) -> None:
+        """
+        Load aliases COMMON to all selected locations.
+        This makes multi-remove well-defined and usable.
+
+        We display `normalized` because it is the canonical key used by deletion logic.
+        """
+        self._location_aliases.clear()
+
+        ids = sorted(self._selected_location_ids)
+        if not ids:
+            return
+
+        placeholders = ",".join("?" for _ in ids)
+
+        con = sqlite3.connect(self._db_path)
+        con.row_factory = sqlite3.Row
+        cur = con.cursor()
+
+        # Use normalized as the identity across locations
+        cur.execute(
+            f"""
+            SELECT normalized
+            FROM location_aliases
+            WHERE location_id IN ({placeholders})
+            GROUP BY normalized
+            HAVING COUNT(DISTINCT location_id) = ?
+            ORDER BY normalized;
+            """,
+            (*ids, len(ids)),
+        )
+
+        rows = cur.fetchall()
+        con.close()
+
+        for r in rows:
+            # display normalized (stable + matches deletion key)
+            self._location_aliases.addItem(r["normalized"])
+
     # --------------------------------------------------
-    # Alias editing (multi-location safe)
+    # Alias editing (single + multi)
     # --------------------------------------------------
 
     def _add_alias(self) -> None:
@@ -290,6 +359,8 @@ class MainWindow(QMainWindow):
         alias = self._alias_input.text().strip()
         if not alias:
             return
+
+        norm = normalize(alias)
 
         con = sqlite3.connect(self._db_path)
         cur = con.cursor()
@@ -301,20 +372,16 @@ class MainWindow(QMainWindow):
                     (location_id, alias, normalized)
                 VALUES (?, ?, ?);
                 """,
-                (loc_id, alias, normalize(alias)),
+                (loc_id, alias, norm),
             )
 
         con.commit()
         con.close()
 
         self._alias_input.clear()
+        self._refresh_alias_editor_after_write()
 
-        if len(self._selected_location_ids) == 1:
-            self._load_location_aliases(next(iter(self._selected_location_ids)))
-
-        self.statusBar().showMessage(
-            f"Alias added to {len(self._selected_location_ids)} location(s)"
-        )
+        self.statusBar().showMessage(f"Alias added to {len(self._selected_location_ids)} location(s)")
 
     def _remove_alias(self) -> None:
         if not self._selected_location_ids:
@@ -324,8 +391,11 @@ class MainWindow(QMainWindow):
         if not items:
             return
 
-        alias = items[0].text()
-        norm = normalize(alias)
+        # IMPORTANT:
+        # - In single-select mode, items are raw aliases -> normalize them.
+        # - In multi-select mode, items are already normalized.
+        selected_text = items[0].text()
+        norm = normalize(selected_text)
 
         con = sqlite3.connect(self._db_path)
         cur = con.cursor()
@@ -343,12 +413,21 @@ class MainWindow(QMainWindow):
         con.commit()
         con.close()
 
-        if len(self._selected_location_ids) == 1:
-            self._load_location_aliases(next(iter(self._selected_location_ids)))
+        self._refresh_alias_editor_after_write()
 
-        self.statusBar().showMessage(
-            f"Alias removed from {len(self._selected_location_ids)} location(s)"
-        )
+        self.statusBar().showMessage(f"Alias removed from {len(self._selected_location_ids)} location(s)")
+
+    def _refresh_alias_editor_after_write(self) -> None:
+        """
+        Refresh alias list panel without duplicating UI items.
+        """
+        if len(self._selected_location_ids) == 1:
+            loc_id = next(iter(self._selected_location_ids))
+            self._load_location_aliases_single(loc_id)
+        elif len(self._selected_location_ids) >= 2:
+            self._load_common_aliases_for_selection()
+        else:
+            self._location_aliases.clear()
 
     # --------------------------------------------------
     # Save (single-location only)
@@ -402,10 +481,5 @@ class MainWindow(QMainWindow):
         self._lbl_region.setText("-")
 
     def _set_details_enabled(self, enabled: bool) -> None:
-        for w in (
-            self._edit_name,
-            self._edit_place,
-            self._edit_wikidata,
-            self._save_btn,
-        ):
+        for w in (self._edit_name, self._edit_place, self._edit_wikidata, self._save_btn):
             w.setEnabled(enabled)
