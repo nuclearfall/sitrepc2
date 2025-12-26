@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QVBoxLayout,
     QHBoxLayout,
+    QLineEdit,
 )
 
 from PySide6.QtCore import Qt
@@ -19,16 +20,17 @@ from sitrepc2.config.paths import gazetteer_path
 
 class MainWindow(QMainWindow):
     """
-    Minimal alias → location viewer.
+    Minimal alias → location viewer with live alias search.
 
-    - Left: location_aliases (LIMIT 200)
-    - Right: locations row for selected location_id
+    - Top: alias search bar
+    - Left: matching aliases (location_aliases)
+    - Right: location details (locations)
     """
 
     def __init__(self) -> None:
         super().__init__()
 
-        self.setWindowTitle("dbeditc2 — alias → location debug")
+        self.setWindowTitle("dbeditc2 — alias search → location")
 
         self._db_path = gazetteer_path()
         print(f"[DEBUG] gazetteer_path = {self._db_path}")
@@ -36,6 +38,10 @@ class MainWindow(QMainWindow):
         # --------------------------------------------------
         # Widgets
         # --------------------------------------------------
+
+        self._search_edit = QLineEdit(self)
+        self._search_edit.setPlaceholderText("Search aliases…")
+        self._search_edit.textChanged.connect(self._on_search_changed)
 
         self._alias_list = QListWidget(self)
         self._alias_list.itemClicked.connect(self._on_alias_clicked)
@@ -54,52 +60,75 @@ class MainWindow(QMainWindow):
         # Layout
         # --------------------------------------------------
 
+        left_panel = QWidget(self)
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.addWidget(self._search_edit)
+        left_layout.addWidget(self._alias_list)
+
         central = QWidget(self)
         layout = QHBoxLayout(central)
-        layout.addWidget(self._alias_list, stretch=1)
+        layout.addWidget(left_panel, stretch=1)
         layout.addWidget(self._details_widget, stretch=1)
 
         self.setCentralWidget(central)
 
         # --------------------------------------------------
-        # Load initial data
+        # Initial load
         # --------------------------------------------------
 
-        self._load_aliases()
+        self._load_aliases(search_text="")
 
     # ------------------------------------------------------
     # Data loading
     # ------------------------------------------------------
 
-    def _load_aliases(self) -> None:
+    def _load_aliases(self, *, search_text: str) -> None:
+        """
+        Load aliases constrained by search_text.
+        """
         con = sqlite3.connect(self._db_path)
         con.row_factory = sqlite3.Row
         cur = con.cursor()
 
-        cur.execute(
-            """
-            SELECT location_id, alias
-            FROM location_aliases
-            ORDER BY alias
-            LIMIT 200;
-            """
-        )
+        if not search_text:
+            cur.execute(
+                """
+                SELECT location_id, alias
+                FROM location_aliases
+                ORDER BY alias
+                LIMIT 200;
+                """
+            )
+        else:
+            norm = " ".join(search_text.lower().split())
+            cur.execute(
+                """
+                SELECT location_id, alias
+                FROM location_aliases
+                WHERE normalized LIKE ?
+                ORDER BY alias
+                LIMIT 200;
+                """,
+                (f"{norm}%",),
+            )
 
         rows = cur.fetchall()
         con.close()
 
-        print(f"[DEBUG] loaded {len(rows)} aliases")
+        print(f"[DEBUG] loaded {len(rows)} aliases for search={search_text!r}")
 
         self._alias_list.clear()
         for row in rows:
-            text = row["alias"]
-            item = QListWidgetItem(text)
+            item = QListWidgetItem(row["alias"])
             item.setData(Qt.UserRole, row["location_id"])
             self._alias_list.addItem(item)
 
     # ------------------------------------------------------
     # Interaction
     # ------------------------------------------------------
+
+    def _on_search_changed(self, text: str) -> None:
+        self._load_aliases(search_text=text)
 
     def _on_alias_clicked(self, item: QListWidgetItem) -> None:
         location_id = item.data(Qt.UserRole)
