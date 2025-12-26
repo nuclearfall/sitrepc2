@@ -147,18 +147,28 @@ def init_workspace(
     _init_records_db(root)
 
     # --------------------------------------------------
-    # 3. Reference files
+    # 3. Lexicon DB (reference)
     # --------------------------------------------------
-    if not lexicon_path(root).exists():
-        shutil.copy2(seed_lexicon_path(), lexicon_path(root))
-        typer.secho("Seeded .sitrepc2/lexicon.json", fg=typer.colors.GREEN)
+    lx_dst = lexicon_path(root)
+    if lx_dst.exists():
+        typer.secho(f"Lexicon DB exists: {lx_dst}", fg=typer.colors.YELLOW)
+    else:
+        src = seed_lexicon_path()
+        if not src.exists():
+            raise RuntimeError(f"Missing seed DB: {src}")
+        shutil.copy2(src, lx_dst)
+        typer.secho("Seeded lexicon DB.", fg=typer.colors.GREEN)
+
+    # --------------------------------------------------
+    # 4. Copy Sources
+    # --------------------------------------------------
 
     if not sources_path(root).exists():
         shutil.copy2(seed_sources_path(), sources_path(root))
         typer.secho("Seeded .sitrepc2/sources.jsonl", fg=typer.colors.GREEN)
 
     # --------------------------------------------------
-    # 4. NLP runtime
+    # 5. NLP runtime
     # --------------------------------------------------
     typer.secho("Checking NLP runtime…", fg=typer.colors.CYAN)
 
