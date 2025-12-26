@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QApplication
 
 from dbeditc2.main_window import MainWindow
 from dbeditc2.controller.editor_controller import EditorController
-
+from dbeditc2.enums import CollectionKind
 
 def main() -> None:
     app = QApplication(sys.argv)
