@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QMainWindow, QTabWidget
 
-from dbeditc2.workspaces.gazetteer_ws import GazetteerWorkspace
+from dbeditc2.gazetteer_ws import GazetteerWorkspace
 
 
 class MainWindow(QMainWindow):
