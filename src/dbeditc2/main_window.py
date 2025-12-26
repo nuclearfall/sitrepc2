@@ -7,8 +7,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from dbeditc2.workspaces.gazetteer_ws import GazetteerWorkspace
-from dbeditc2.workspaces.lexicon_ws import LexiconWorkspace
+from dbeditc2.gazetteer_ws import GazetteerWorkspace
+from dbeditc2.lexicon_ws import LexiconWorkspace
 
 
 class MainWindow(QMainWindow):
