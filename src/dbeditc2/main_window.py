@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
 )
+
 from PySide6.QtCore import Qt
 
 from sitrepc2.config.paths import gazetteer_path
@@ -28,12 +29,12 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
 
-        self.setWindowTitle("dbeditc2 — location editor")
+        self.setWindowTitle("dbeditc2 — alias & location editor")
         self._db_path = gazetteer_path()
         self._current_location_id: int | None = None
 
         # --------------------------------------------------
-        # Search
+        # Search widgets
         # --------------------------------------------------
 
         self._search_edit = QLineEdit(self)
@@ -77,13 +78,36 @@ class MainWindow(QMainWindow):
         form.addRow("Wikidata:", self._edit_wikidata)
         form.addRow("Region:", self._lbl_region)
 
-        self._save_btn = QPushButton("Save changes", self)
+        self._save_btn = QPushButton("Save location changes", self)
         self._save_btn.setEnabled(False)
         self._save_btn.clicked.connect(self._save_location_changes)
         self._details_layout.addWidget(self._save_btn)
 
         # --------------------------------------------------
-        # Layout
+        # Alias editor for selected location
+        # --------------------------------------------------
+
+        self._details_layout.addWidget(QLabel("Aliases for this location:"))
+
+        self._location_aliases = QListWidget(self)
+        self._details_layout.addWidget(self._location_aliases)
+
+        alias_controls = QHBoxLayout()
+        self._alias_input = QLineEdit(self)
+        self._alias_input.setPlaceholderText("Add alias…")
+        self._alias_add_btn = QPushButton("Add", self)
+        self._alias_remove_btn = QPushButton("Remove", self)
+
+        alias_controls.addWidget(self._alias_input)
+        alias_controls.addWidget(self._alias_add_btn)
+        alias_controls.addWidget(self._alias_remove_btn)
+        self._details_layout.addLayout(alias_controls)
+
+        self._alias_add_btn.clicked.connect(self._add_alias)
+        self._alias_remove_btn.clicked.connect(self._remove_alias)
+
+        # --------------------------------------------------
+        # Layout wiring
         # --------------------------------------------------
 
         left = QWidget(self)
@@ -93,12 +117,11 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self._alias_list)
 
         central = QWidget(self)
-        layout = QHBoxLayout(central)
-        layout.addWidget(left, 1)
-        layout.addWidget(self._details_widget, 1)
+        main_layout = QHBoxLayout(central)
+        main_layout.addWidget(left, 1)
+        main_layout.addWidget(self._details_widget, 1)
         self.setCentralWidget(central)
 
-        # Ensure status bar exists
         self.statusBar().showMessage("Ready")
 
         self._load_by_alias("")
@@ -141,7 +164,6 @@ class MainWindow(QMainWindow):
         self._alias_list.clear()
         for r in rows:
             item = QListWidgetItem(r["alias"])
-            # Force Python int (avoid QVariant surprises)
             item.setData(Qt.UserRole, int(r["location_id"]))
             self._alias_list.addItem(item)
 
@@ -175,19 +197,15 @@ class MainWindow(QMainWindow):
             self._alias_list.addItem(item)
 
     # --------------------------------------------------
-    # Selection
+    # Selection + details
     # --------------------------------------------------
 
     def _on_alias_clicked(self, item: QListWidgetItem) -> None:
-        raw_id = item.data(Qt.UserRole)
-        try:
-            self._current_location_id = int(raw_id)
-        except Exception as e:
-            raise RuntimeError(f"Selected location_id is not an int: {raw_id!r}") from e
-
+        location_id = item.data(Qt.UserRole)
+        self._current_location_id = location_id
         self._load_location()
+        self._load_location_aliases()
         self._save_btn.setEnabled(True)
-        self.statusBar().showMessage(f"Loaded location_id={self._current_location_id}")
 
     def _load_location(self) -> None:
         if self._current_location_id is None:
@@ -222,8 +240,9 @@ class MainWindow(QMainWindow):
         con.close()
 
         if not row:
-            raise RuntimeError(f"locations row not found for location_id={self._current_location_id}")
+            return
 
+        # Populate form
         self._lbl_location_id.setText(str(row["location_id"]))
         self._lbl_lat.setText(str(row["lat"]))
         self._lbl_lon.setText(str(row["lon"]))
@@ -233,12 +252,83 @@ class MainWindow(QMainWindow):
         self._lbl_region.setText(region_row["name"] if region_row else "-")
 
     # --------------------------------------------------
-    # Save
+    # Alias list for this location
+    # --------------------------------------------------
+
+    def _load_location_aliases(self) -> None:
+        self._location_aliases.clear()
+
+        con = sqlite3.connect(self._db_path)
+        cur = con.cursor()
+        cur.execute(
+            "SELECT alias FROM location_aliases WHERE location_id = ? ORDER BY alias;",
+            (self._current_location_id,),
+        )
+        for (alias,) in cur.fetchall():
+            self._location_aliases.addItem(alias)
+
+        con.close()
+
+    # --------------------------------------------------
+    # Alias editing
+    # --------------------------------------------------
+
+    def _add_alias(self) -> None:
+        if not self._current_location_id:
+            return
+
+        alias = self._alias_input.text().strip()
+        if not alias:
+            return
+
+        con = sqlite3.connect(self._db_path)
+        cur = con.cursor()
+        cur.execute(
+            """
+            INSERT OR IGNORE INTO location_aliases
+                (location_id, alias, normalized)
+            VALUES (?, ?, ?);
+            """,
+            (self._current_location_id, alias, normalize(alias)),
+        )
+        con.commit()
+        con.close()
+
+        self._alias_input.clear()
+        self._load_location_aliases()
+
+    def _remove_alias(self) -> None:
+        if not self._current_location_id:
+            return
+
+        items = self._location_aliases.selectedItems()
+        if not items:
+            return
+
+        alias = items[0].text()
+
+        con = sqlite3.connect(self._db_path)
+        cur = con.cursor()
+        cur.execute(
+            """
+            DELETE FROM location_aliases
+            WHERE location_id = ?
+              AND normalized = ?;
+            """,
+            (self._current_location_id, normalize(alias)),
+        )
+        con.commit()
+        con.close()
+
+        self._load_location_aliases()
+
+    # --------------------------------------------------
+    # Save details
     # --------------------------------------------------
 
     def _save_location_changes(self) -> None:
         if self._current_location_id is None:
-            raise RuntimeError("Save requested with no selected location")
+            return
 
         new_name = self._edit_name.text().strip() or None
         new_place = self._edit_place.text().strip() or None
@@ -253,23 +343,27 @@ class MainWindow(QMainWindow):
             SET name = ?, place = ?, wikidata = ?
             WHERE location_id = ?;
             """,
-            (new_name, new_place, new_wikidata, int(self._current_location_id)),
+            (new_name, new_place, new_wikidata, self._current_location_id),
         )
 
-        # FAIL LOUDLY: must touch exactly one row.
-        # If this is >1, something is catastrophically wrong (or triggers exist).
         if cur.rowcount != 1:
             con.rollback()
             con.close()
             raise RuntimeError(
-                f"Unexpected UPDATE rowcount={cur.rowcount} for location_id={self._current_location_id}. "
-                "Refusing to commit."
+                f"Failed to update exactly one row for location_id={self._current_location_id}"
             )
 
         con.commit()
         con.close()
 
-        # Feedback: reload canonical DB state, then defocus edits
+        # Reload to reflect canonical saved state
         self._load_location()
-        self._save_btn.setFocus(Qt.OtherFocusReason)  # defocus text fields
-        self.statusBar().showMessage(f"Saved changes for location_id={self._current_location_id}")
+
+        # Defocus edits
+        self._edit_name.clearFocus()
+        self._edit_place.clearFocus()
+        self._edit_wikidata.clearFocus()
+
+        self.statusBar().showMessage(
+            f"Saved details for location_id={self._current_location_id}"
+        )
