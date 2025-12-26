@@ -27,6 +27,9 @@ class NavigationTree(QTreeWidget):
         self._build_tree()
         self.itemSelectionChanged.connect(self._on_selection_changed)
 
+        # 🔹 IMPORTANT: select default collection
+        self._select_default()
+
     def _build_tree(self) -> None:
         # Root items
         gazetteer_root = QTreeWidgetItem(self, ["Gazetteer"])
@@ -62,6 +65,13 @@ class NavigationTree(QTreeWidget):
         collection = self._item_to_collection.get(item)
         if collection is not None:
             self.collectionSelected.emit(collection)
+
+    def _select_default(self) -> None:
+        """
+        Select the default collection on startup.
+        """
+        # Default to Locations
+        self.set_current(CollectionKind.LOCATIONS)
 
     def set_current(self, collection: CollectionKind) -> None:
         """
