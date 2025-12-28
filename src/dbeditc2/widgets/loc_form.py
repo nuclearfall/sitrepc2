@@ -210,6 +210,14 @@ class LocationForm(QWidget):
     # Save / create
     # --------------------------------------------------
 
+    def _set_view_mode(self) -> None:
+        """
+        Put the form into view/edit-existing mode.
+        """
+        self._create_mode = False
+        self.save_btn.show()
+        self.finalize_btn.hide()
+
     def _save_existing(self) -> None:
         if not self._location_id:
             return
