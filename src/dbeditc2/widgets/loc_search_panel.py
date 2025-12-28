@@ -83,8 +83,8 @@ class LocationSearchPanel(QWidget):
             self._search_locations(text)
         elif mode == self.MODE_ALIASES:
             self._search_aliases(text)
-        elif mode == self.MODE_OSM:
-            self._lookup_identifier("osm_id", text)
+        # elif mode == self.MODE_OSM:
+        #     self._lookup_identifier("osm_id", text)
         elif mode == self.MODE_WIKIDATA:
             self._lookup_identifier("wikidata", text)
 

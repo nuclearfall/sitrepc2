@@ -14,7 +14,7 @@ CREATE TABLE locations (
     lon          REAL NOT NULL,
     name         TEXT,
     place        TEXT,
-    wikidata     TEXT
+    wikidata     TEXT,
 );
 
 -- ------------------------------------------------------------

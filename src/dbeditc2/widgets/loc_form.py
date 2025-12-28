@@ -161,7 +161,7 @@ class LocationForm(QWidget):
             self.lon_edit.setText(str(loc["lon"]))
             self.name_edit.setText(loc["name"] or "")
             self.place_edit.setText(loc["place"] or "")
-            self.osm_edit.setText(loc["osm_id"] if "osm_id" in loc.keys() and loc["osm_id"] else "")
+            # self.osm_edit.setText(loc["osm_id"] if "osm_id" in loc.keys() and loc["osm_id"] else "")
             self.wikidata_edit.setText(
                 loc["wikidata"] if "wikidata" in loc.keys() and loc["wikidata"] else ""
             )
@@ -244,7 +244,7 @@ class LocationForm(QWidget):
             con.execute(
                 """
                 UPDATE locations
-                SET name=?, place=?, osm_id=?, wikidata=?
+                SET name=?, place=?, wikidata=?
                 WHERE location_id=?
                 """,
                 (
@@ -303,7 +303,7 @@ class LocationForm(QWidget):
                 con.execute(
                     """
                     INSERT INTO locations
-                    (location_id, lat, lon, name, place, osm_id, wikidata)
+                    (location_id, lat, lon, name, place, wikidata)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
