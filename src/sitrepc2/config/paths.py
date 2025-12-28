@@ -22,12 +22,12 @@ GAZETTEER_DB = "gazetteer.db"
 RECORDS_DB = "records.db"
 LEXICON = "lexicon.db"
 SOURCES = "sources.jsonl"
+LOC_POLYLINE = "loc_polylines.geojson"
 
 # Schema filenames
 REC_SCHEMA_INGEST = "ingest.sql"
 REC_SCHEMA_LSS = "lss.sql"
 GAZ_SCHEMA_GAZETTEER = "gazetteer.sql"
-
 # ---------------------------------------------------------------------------
 # Repo / workspace discovery
 # ---------------------------------------------------------------------------
@@ -86,6 +86,9 @@ def seed_sources_path() -> Path:
 def seed_gazetteer_path() -> Path:
     return seed_reference_path() / SEED_GAZETTEER_DB
 
+def seed_loc_polyline_path() -> Path:
+    return seed_reference_path() / LOC_POLYLINE
+
 # ---------------------------------------------------------------------------
 # Workspace files
 # ---------------------------------------------------------------------------
@@ -102,6 +105,9 @@ def lexicon_path(root: Optional[Path] = None) -> Path:
 def sources_path(root: Optional[Path] = None) -> Path:
     return dot_path(root) / SOURCES
 
+def loc_polyline_path() -> Path:
+     return dot_path(root) / LOC_POLYLINE
+
 # ---------------------------------------------------------------------------
 # Schema files
 # ---------------------------------------------------------------------------
@@ -114,3 +120,4 @@ def lss_schema_path() -> Path:
 
 def gazetteer_schema_path() -> Path:
     return gaz_schema_root_path() / GAZ_SCHEMA_GAZETTEER
+

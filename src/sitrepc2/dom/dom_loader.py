@@ -229,6 +229,7 @@ def apply_location_candidates(
             confidence=confidence,
             persists=bool(persists),
             selected=bool(selected),
+            neartest_loc=frontline(lat, lon)
         )
         nodes[location_node_id].add_child(candidate)
 

@@ -14,11 +14,13 @@ from sitrepc2.config.paths import (
     seed_lexicon_path,
     seed_sources_path,
     seed_gazetteer_path,
+    seed_loc_polyline_path,
     gazetteer_path,
     records_path,
     lexicon_path,
     sources_path,
     rec_schema_root_path,
+    loc_polyline_path,
 )
 
 app = typer.Typer(
@@ -160,8 +162,12 @@ def init_workspace(
         typer.secho("Seeded lexicon DB.", fg=typer.colors.GREEN)
 
     # --------------------------------------------------
-    # 4. Copy Sources
+    # 4. Copy Sources & LOC POLYGONS
     # --------------------------------------------------
+
+    if not sources_path(root).exists():
+        shutil.copy2(seed_sources_path(), sources_path(root))
+        typer.secho("Seeded .sitrepc2/loc_polylines.geojson", fg=typer.colors.GREEN)
 
     if not sources_path(root).exists():
         shutil.copy2(seed_sources_path(), sources_path(root))
