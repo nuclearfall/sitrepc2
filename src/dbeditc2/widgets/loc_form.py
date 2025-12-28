@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import Optional, List
+from typing import Optional
 
 from PySide6.QtCore import Signal, Slot
 from PySide6.QtWidgets import (
@@ -41,8 +41,8 @@ class LocationForm(QWidget):
     """
 
     statusMessage = Signal(str)
-    locationCreated = Signal(int)   # new location_id
-    locationUpdated = Signal(int)
+    locationCreated = Signal(object)   # 64-bit safe
+    locationUpdated = Signal(object)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -138,9 +138,9 @@ class LocationForm(QWidget):
     # --------------------------------------------------
     # Public API
     # --------------------------------------------------
+
     @Slot(object)
-    def load_location(self, location_id: int) -> None:
-        """Load an existing location."""
+    def load_location(self, location_id: object) -> None:
         self._location_id = location_id
         self._create_mode = False
         self.finalize_btn.hide()
@@ -161,18 +161,36 @@ class LocationForm(QWidget):
             self.lon_edit.setText(str(loc["lon"]))
             self.name_edit.setText(loc["name"] or "")
             self.place_edit.setText(loc["place"] or "")
-            self.osm_edit.setText(loc["osm_id"] or "")
-            self.wikidata_edit.setText(loc["wikidata"] or "")
+            self.osm_edit.setText(loc.get("osm_id") or "")
+            self.wikidata_edit.setText(loc.get("wikidata") or "")
 
+            # aliases
             self.alias_list.clear()
             for a in con.execute(
-                "SELECT alias FROM location_aliases WHERE location_id = ? ORDER BY alias",
+                "SELECT alias FROM location_aliases WHERE location_id=? ORDER BY alias",
                 (location_id,),
             ):
                 self.alias_list.addItem(a["alias"])
 
+            # group
+            gid = con.execute(
+                "SELECT group_id FROM location_groups WHERE location_id=?",
+                (location_id,),
+            ).fetchone()
+            self.group_combo.setCurrentIndex(
+                self.group_combo.findData(gid["group_id"]) if gid else 0
+            )
+
+            # region
+            rid = con.execute(
+                "SELECT region_id FROM location_regions WHERE location_id=?",
+                (location_id,),
+            ).fetchone()
+            self.region_combo.setCurrentIndex(
+                self.region_combo.findData(rid["region_id"]) if rid else 0
+            )
+
     def enter_create_mode(self) -> None:
-        """Prepare form for creating a new location."""
         self._location_id = None
         self._create_mode = True
 
@@ -187,6 +205,8 @@ class LocationForm(QWidget):
             w.clear()
 
         self.alias_list.clear()
+        self.group_combo.setCurrentIndex(0)
+        self.region_combo.setCurrentIndex(0)
         self.id_label.setText("—")
 
         self.save_btn.hide()
@@ -211,9 +231,6 @@ class LocationForm(QWidget):
     # --------------------------------------------------
 
     def _set_view_mode(self) -> None:
-        """
-        Put the form into view/edit-existing mode.
-        """
         self._create_mode = False
         self.save_btn.show()
         self.finalize_btn.hide()
@@ -243,14 +260,28 @@ class LocationForm(QWidget):
                 (self._location_id,),
             )
             for i in range(self.alias_list.count()):
-                alias = self.alias_list.item(i).text()
+                a = self.alias_list.item(i).text()
                 con.execute(
                     """
                     INSERT INTO location_aliases
                     (location_id, alias, normalized)
                     VALUES (?, ?, ?)
                     """,
-                    (self._location_id, alias, alias.lower()),
+                    (self._location_id, a, a.lower()),
+                )
+
+            con.execute("DELETE FROM location_groups WHERE location_id=?", (self._location_id,))
+            con.execute("DELETE FROM location_regions WHERE location_id=?", (self._location_id,))
+
+            if self.group_combo.currentData() is not None:
+                con.execute(
+                    "INSERT INTO location_groups VALUES (?, ?)",
+                    (self._location_id, self.group_combo.currentData()),
+                )
+            if self.region_combo.currentData() is not None:
+                con.execute(
+                    "INSERT INTO location_regions VALUES (?, ?)",
+                    (self._location_id, self.region_combo.currentData()),
                 )
 
         self.statusMessage.emit("Location updated")
@@ -286,14 +317,25 @@ class LocationForm(QWidget):
                 )
 
                 for i in range(self.alias_list.count()):
-                    alias = self.alias_list.item(i).text()
+                    a = self.alias_list.item(i).text()
                     con.execute(
                         """
                         INSERT INTO location_aliases
                         (location_id, alias, normalized)
                         VALUES (?, ?, ?)
                         """,
-                        (location_id, alias, alias.lower()),
+                        (location_id, a, a.lower()),
+                    )
+
+                if self.group_combo.currentData() is not None:
+                    con.execute(
+                        "INSERT INTO location_groups VALUES (?, ?)",
+                        (location_id, self.group_combo.currentData()),
+                    )
+                if self.region_combo.currentData() is not None:
+                    con.execute(
+                        "INSERT INTO location_regions VALUES (?, ?)",
+                        (location_id, self.region_combo.currentData()),
                     )
 
             QMessageBox.information(self, "Created", f"Location {location_id} created")

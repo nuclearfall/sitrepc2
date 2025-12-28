@@ -23,8 +23,9 @@ class LocationSearchPanel(QWidget):
     Left-hand search panel for gazetteer locations.
     """
 
-    locationSelected = Signal(object)   # location_id
-    createRequested = Signal()       # NEW
+    # MUST be object to safely carry 64-bit location_id
+    locationSelected = Signal(object)      # location_id
+    createRequested = Signal()
     statusMessage = Signal(str)
 
     MODE_LOCATIONS = "Locations (name / alias)"
@@ -50,7 +51,6 @@ class LocationSearchPanel(QWidget):
 
         self.results = QListWidget()
 
-        # NEW: Add New button
         self.add_new_btn = QPushButton("Add New Location")
         self.add_new_btn.clicked.connect(self.createRequested.emit)
 
@@ -108,7 +108,10 @@ class LocationSearchPanel(QWidget):
             )
 
             for row in rows:
-                label = f"{row['name']} ({row['region_name'] or '—'}/{row['place'] or '—'})"
+                label = (
+                    f"{row['name']} "
+                    f"({row['region_name'] or '—'}/{row['place'] or '—'})"
+                )
                 item = QListWidgetItem(label)
                 item.setData(Qt.UserRole, row["location_id"])
                 self.results.addItem(item)
@@ -134,7 +137,10 @@ class LocationSearchPanel(QWidget):
             )
 
             for row in rows:
-                label = f"{row['alias']} → {row['name']} ({row['region_name'] or '—'}/{row['place'] or '—'})"
+                label = (
+                    f"{row['alias']} → {row['name']} "
+                    f"({row['region_name'] or '—'}/{row['place'] or '—'})"
+                )
                 item = QListWidgetItem(label)
                 item.setData(Qt.UserRole, row["location_id"])
                 self.results.addItem(item)
@@ -151,11 +157,15 @@ class LocationSearchPanel(QWidget):
             ).fetchone()
 
             if row:
+                # DO NOT cast — keep full 64-bit value
                 self.locationSelected.emit(row["location_id"])
             else:
-                self.statusMessage.emit(f"No location found for {field}={value}")
+                self.statusMessage.emit(
+                    f"No location found for {field}={value}"
+                )
 
     def _on_item_clicked(self, item: QListWidgetItem) -> None:
         location_id = item.data(Qt.UserRole)
         if location_id is not None:
+            # DO NOT cast — keep full 64-bit value
             self.locationSelected.emit(location_id)
