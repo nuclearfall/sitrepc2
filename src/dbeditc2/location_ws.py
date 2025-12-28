@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QWidget, QHBoxLayout
 
-from widgets.loc_search_panel import LocationSearchPanel
-from widgets.loc_form import LocationForm
+from .widgets.loc_search_panel import LocationSearchPanel
+from .widgets.loc_form import LocationForm
 
 
 class LocationWorkspace(QWidget):
