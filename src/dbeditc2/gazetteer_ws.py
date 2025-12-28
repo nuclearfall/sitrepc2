@@ -22,8 +22,19 @@ from sitrepc2.config.paths import gazetteer_path
 
 
 # ------------------------------------------------------------
-# Helpers
+# Identity / helpers
 # ------------------------------------------------------------
+
+def encode_coord_u64(lat: float, lon: float) -> int:
+    """Encode (lat, lon) into a single 64-bit integer key with 6-decimal precision."""
+    lat = round(lat, 6)
+    lon = round(lon, 6)
+
+    lat_u32 = int((lat + 90.0) * 1_000_000)
+    lon_u32 = int((lon + 180.0) * 1_000_000)
+
+    return (lat_u32 << 32) | lon_u32
+
 
 def _split_aliases(text: str) -> List[str]:
     raw = text.replace(",", "\n").replace(";", "\n")
@@ -80,12 +91,14 @@ class GazetteerWorkspace(QWidget):
         self._lat_edit = QLineEdit(self)
         self._lon_edit = QLineEdit(self)
 
+        self._osm_id_edit = QLineEdit(self)
+        self._wikidata_edit = QLineEdit(self)
+
         self._aliases_edit = QPlainTextEdit(self)
         self._aliases_edit.setPlaceholderText(
             "One alias per line, or comma / semicolon separated"
         )
 
-        # SINGLE selection via dropdowns (domain invariant)
         self._group_combo = QComboBox(self)
         self._region_combo = QComboBox(self)
 
@@ -98,6 +111,8 @@ class GazetteerWorkspace(QWidget):
         form.addRow("Place", self._place_edit)
         form.addRow("Latitude", self._lat_edit)
         form.addRow("Longitude", self._lon_edit)
+        form.addRow("OSM ID", self._osm_id_edit)
+        form.addRow("Wikidata", self._wikidata_edit)
         form.addRow("Aliases", self._aliases_edit)
         form.addRow("Group", self._group_combo)
         form.addRow("Region", self._region_combo)
@@ -117,7 +132,7 @@ class GazetteerWorkspace(QWidget):
         self._search("")
 
     # --------------------------------------------------
-    # Data loading
+    # DB helpers
     # --------------------------------------------------
 
     def _conn(self) -> sqlite3.Connection:
@@ -171,7 +186,6 @@ class GazetteerWorkspace(QWidget):
 
         item = self._result_list.selectedItems()[0]
         self._current_location_id = item.data(Qt.UserRole)
-
         self._load_location(self._current_location_id)
 
     # --------------------------------------------------
@@ -183,20 +197,24 @@ class GazetteerWorkspace(QWidget):
         self._current_location_id = None
         self._result_list.clearSelection()
 
-        self._name_edit.clear()
-        self._place_edit.clear()
-        self._lat_edit.clear()
-        self._lon_edit.clear()
-        self._aliases_edit.clear()
+        for w in (
+            self._name_edit,
+            self._place_edit,
+            self._lat_edit,
+            self._lon_edit,
+            self._osm_id_edit,
+            self._wikidata_edit,
+        ):
+            w.clear()
 
-        # reset dropdowns
+        self._aliases_edit.clear()
         self._group_combo.setCurrentIndex(0)
         self._region_combo.setCurrentIndex(0)
 
         self._finalize_btn.show()
 
     # --------------------------------------------------
-    # Load existing location
+    # Load existing
     # --------------------------------------------------
 
     def _load_location(self, location_id: int) -> None:
@@ -209,6 +227,8 @@ class GazetteerWorkspace(QWidget):
             self._place_edit.setText(loc["place"] or "")
             self._lat_edit.setText(str(loc["lat"]))
             self._lon_edit.setText(str(loc["lon"]))
+            self._osm_id_edit.setText(str(loc["osm_id"] or ""))
+            self._wikidata_edit.setText(loc["wikidata"] or "")
 
             aliases = con.execute(
                 "SELECT alias FROM location_aliases WHERE location_id = ? ORDER BY alias",
@@ -216,29 +236,17 @@ class GazetteerWorkspace(QWidget):
             ).fetchall()
             self._aliases_edit.setPlainText("\n".join(a["alias"] for a in aliases))
 
-            # Group: expect 0..1, but handle dirty DB gracefully
-            group_rows = con.execute(
+            group = con.execute(
                 "SELECT group_id FROM location_groups WHERE location_id = ?",
                 (location_id,),
-            ).fetchall()
-            if len(group_rows) > 1:
-                self.statusMessage.emit(
-                    f"Warning: location_id={location_id} has multiple groups; showing first."
-                )
-            group_id = group_rows[0]["group_id"] if group_rows else None
-            _combo_set_by_user_data(self._group_combo, group_id)
+            ).fetchone()
+            _combo_set_by_user_data(self._group_combo, group["group_id"] if group else None)
 
-            # Region: expect 0..1, but handle dirty DB gracefully
-            region_rows = con.execute(
+            region = con.execute(
                 "SELECT region_id FROM location_regions WHERE location_id = ?",
                 (location_id,),
-            ).fetchall()
-            if len(region_rows) > 1:
-                self.statusMessage.emit(
-                    f"Warning: location_id={location_id} has multiple regions; showing first."
-                )
-            region_id = region_rows[0]["region_id"] if region_rows else None
-            _combo_set_by_user_data(self._region_combo, region_id)
+            ).fetchone()
+            _combo_set_by_user_data(self._region_combo, region["region_id"] if region else None)
 
     # --------------------------------------------------
     # Finalize creation
@@ -252,58 +260,57 @@ class GazetteerWorkspace(QWidget):
             QMessageBox.critical(self, "Invalid input", "Latitude/Longitude invalid.")
             return
 
+        location_id = encode_coord_u64(lat, lon)
         aliases = _split_aliases(self._aliases_edit.toPlainText())
 
         group_id = self._group_combo.currentData()
         region_id = self._region_combo.currentData()
 
+        osm_id = self._osm_id_edit.text().strip() or None
+        wikidata = self._wikidata_edit.text().strip() or None
+
         try:
             with self._conn() as con:
-                cur = con.execute(
+                con.execute(
                     """
-                    INSERT INTO locations (lat, lon, name, place)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO locations (
+                        location_id, lat, lon, name, place, osm_id, wikidata
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
+                        location_id,
                         lat,
                         lon,
                         self._name_edit.text() or None,
                         self._place_edit.text() or None,
+                        osm_id,
+                        wikidata,
                     ),
                 )
-                loc_id = cur.lastrowid
 
-                # aliases
                 for a in aliases:
                     con.execute(
                         """
                         INSERT INTO location_aliases (location_id, alias, normalized)
                         VALUES (?, ?, ?)
                         """,
-                        (loc_id, a, a.lower()),
+                        (location_id, a, a.lower()),
                     )
 
-                # single group
                 if group_id is not None:
                     con.execute(
-                        """
-                        INSERT INTO location_groups (location_id, group_id)
-                        VALUES (?, ?)
-                        """,
-                        (loc_id, group_id),
+                        "INSERT INTO location_groups (location_id, group_id) VALUES (?, ?)",
+                        (location_id, group_id),
                     )
 
-                # single region
                 if region_id is not None:
                     con.execute(
-                        """
-                        INSERT INTO location_regions (location_id, region_id)
-                        VALUES (?, ?)
-                        """,
-                        (loc_id, region_id),
+                        "INSERT INTO location_regions (location_id, region_id) VALUES (?, ?)",
+                        (location_id, region_id),
                     )
 
-            self.statusMessage.emit(f"Created location {loc_id}")
+            self.statusMessage.emit(f"Created location {location_id}")
             self._create_mode = False
             self._finalize_btn.hide()
             self._search(self._search_edit.text())
