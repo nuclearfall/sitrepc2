@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import sqlite3
+from typing import List, Optional
 
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QWidget,
     QListWidget,
@@ -13,350 +15,266 @@ from PySide6.QtWidgets import (
     QPushButton,
     QComboBox,
     QFormLayout,
+    QPlainTextEdit,
+    QMessageBox,
 )
-
-from PySide6.QtCore import Qt, Signal
 
 from sitrepc2.config.paths import gazetteer_path
 
 
-def normalize(text: str) -> str:
-    return " ".join(text.lower().split())
+# ------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------
 
+def _split_aliases(text: str) -> List[str]:
+    raw = text.replace(",", "\n").replace(";", "\n")
+    return sorted({a.strip() for a in raw.splitlines() if a.strip()})
+
+
+# ------------------------------------------------------------
+# Gazetteer Workspace
+# ------------------------------------------------------------
 
 class GazetteerWorkspace(QWidget):
-    """
-    Gazetteer alias & location editor workspace.
-    """
-
     statusMessage = Signal(str)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
 
         self._db_path = gazetteer_path()
-        self._current_location_id: int | None = None
+        self._current_location_id: Optional[int] = None
+        self._create_mode: bool = False
 
         # --------------------------------------------------
-        # Search widgets
+        # Search pane
         # --------------------------------------------------
 
         self._search_edit = QLineEdit(self)
-        self._search_edit.setPlaceholderText("Search…")
-        self._search_edit.textChanged.connect(self._on_search_changed)
+        self._search_edit.setPlaceholderText("Search locations…")
+        self._search_edit.textChanged.connect(self._search)
 
-        self._lookup_mode = QComboBox(self)
-        self._lookup_mode.addItems(["alias", "osm_id", "wikidata"])
-        self._lookup_mode.currentTextChanged.connect(
-            lambda _: self._on_search_changed(self._search_edit.text())
+        self._add_new_btn = QPushButton("Add New", self)
+        self._add_new_btn.clicked.connect(self._enter_create_mode)
+
+        self._result_list = QListWidget(self)
+        self._result_list.itemSelectionChanged.connect(self._on_select)
+
+        search_layout = QVBoxLayout()
+        search_layout.addWidget(self._search_edit)
+        search_layout.addWidget(self._add_new_btn)
+        search_layout.addWidget(self._result_list)
+
+        # --------------------------------------------------
+        # Detail / form pane
+        # --------------------------------------------------
+
+        self._name_edit = QLineEdit(self)
+        self._place_edit = QLineEdit(self)
+        self._lat_edit = QLineEdit(self)
+        self._lon_edit = QLineEdit(self)
+
+        self._aliases_edit = QPlainTextEdit(self)
+        self._aliases_edit.setPlaceholderText(
+            "One alias per line, or comma / semicolon separated"
         )
 
-        self._alias_list = QListWidget(self)
-        self._alias_list.itemClicked.connect(self._on_alias_clicked)
+        self._groups_list = QListWidget(self)
+        self._groups_list.setSelectionMode(QListWidget.MultiSelection)
 
-        # --------------------------------------------------
-        # Details form
-        # --------------------------------------------------
+        self._regions_list = QListWidget(self)
+        self._regions_list.setSelectionMode(QListWidget.MultiSelection)
 
-        self._details_widget = QWidget(self)
-        self._details_layout = QVBoxLayout(self._details_widget)
-        self._details_layout.setAlignment(Qt.AlignTop)
+        self._finalize_btn = QPushButton("Finalize Entry", self)
+        self._finalize_btn.clicked.connect(self._finalize_entry)
+        self._finalize_btn.hide()
 
         form = QFormLayout()
-        self._details_layout.addLayout(form)
-
-        self._lbl_location_id = QLabel("-")
-        self._lbl_lat = QLabel("-")
-        self._lbl_lon = QLabel("-")
-        self._lbl_region = QLabel("-")
-
-        self._edit_name = QLineEdit()
-        self._edit_place = QLineEdit()
-        self._edit_wikidata = QLineEdit()
-
-        form.addRow("Location ID:", self._lbl_location_id)
-        form.addRow("Latitude:", self._lbl_lat)
-        form.addRow("Longitude:", self._lbl_lon)
-        form.addRow("Name:", self._edit_name)
-        form.addRow("Place:", self._edit_place)
-        form.addRow("Wikidata:", self._edit_wikidata)
-        form.addRow("Region:", self._lbl_region)
-
-        self._save_btn = QPushButton("Save location changes", self)
-        self._save_btn.setEnabled(False)
-        self._save_btn.clicked.connect(self._save_location_changes)
-        self._details_layout.addWidget(self._save_btn)
+        form.addRow("Name", self._name_edit)
+        form.addRow("Place", self._place_edit)
+        form.addRow("Latitude", self._lat_edit)
+        form.addRow("Longitude", self._lon_edit)
+        form.addRow("Aliases", self._aliases_edit)
+        form.addRow("Groups", self._groups_list)
+        form.addRow("Regions", self._regions_list)
+        form.addRow(self._finalize_btn)
 
         # --------------------------------------------------
-        # Alias editor
+        # Main layout
         # --------------------------------------------------
 
-        self._details_layout.addWidget(QLabel("Aliases for this location:"))
+        main = QHBoxLayout(self)
+        main.addLayout(search_layout, 1)
+        main.addLayout(form, 2)
 
-        self._location_aliases = QListWidget(self)
-        self._details_layout.addWidget(self._location_aliases)
+        self.setLayout(main)
 
-        alias_controls = QHBoxLayout()
-        self._alias_input = QLineEdit(self)
-        self._alias_input.setPlaceholderText("Add alias…")
-        self._alias_add_btn = QPushButton("Add", self)
-        self._alias_remove_btn = QPushButton("Remove", self)
-
-        alias_controls.addWidget(self._alias_input)
-        alias_controls.addWidget(self._alias_add_btn)
-        alias_controls.addWidget(self._alias_remove_btn)
-        self._details_layout.addLayout(alias_controls)
-
-        self._alias_add_btn.clicked.connect(self._add_alias)
-        self._alias_remove_btn.clicked.connect(self._remove_alias)
-
-        # --------------------------------------------------
-        # Layout
-        # --------------------------------------------------
-
-        left = QWidget(self)
-        left_layout = QVBoxLayout(left)
-        left_layout.addWidget(self._search_edit)
-        left_layout.addWidget(self._lookup_mode)
-        left_layout.addWidget(self._alias_list)
-
-        main_layout = QHBoxLayout(self)
-        main_layout.addWidget(left, 1)
-        main_layout.addWidget(self._details_widget, 1)
-
-        self.statusMessage.emit("Ready")
-
-        self._load_by_alias("")
+        self._load_groups()
+        self._load_regions()
+        self._search("")
 
     # --------------------------------------------------
-    # Search logic
+    # Data loading
     # --------------------------------------------------
 
-    def _on_search_changed(self, text: str) -> None:
-        mode = self._lookup_mode.currentText()
-        if mode == "alias":
-            self._load_by_alias(text)
-        else:
-            self._load_by_location_field(mode, text)
-
-    def _load_by_alias(self, text: str) -> None:
+    def _conn(self) -> sqlite3.Connection:
         con = sqlite3.connect(self._db_path)
         con.row_factory = sqlite3.Row
-        cur = con.cursor()
+        con.execute("PRAGMA foreign_keys = ON;")
+        return con
 
-        if not text:
-            cur.execute(
-                "SELECT location_id, alias FROM location_aliases ORDER BY alias LIMIT 200;"
-            )
-        else:
-            cur.execute(
+    def _load_groups(self) -> None:
+        self._groups_list.clear()
+        with self._conn() as con:
+            for r in con.execute("SELECT group_id, name FROM groups ORDER BY name"):
+                item = QListWidgetItem(r["name"])
+                item.setData(Qt.UserRole, r["group_id"])
+                self._groups_list.addItem(item)
+
+    def _load_regions(self) -> None:
+        self._regions_list.clear()
+        with self._conn() as con:
+            for r in con.execute("SELECT region_id, name FROM regions ORDER BY name"):
+                item = QListWidgetItem(r["name"])
+                item.setData(Qt.UserRole, r["region_id"])
+                self._regions_list.addItem(item)
+
+    # --------------------------------------------------
+    # Search / select
+    # --------------------------------------------------
+
+    def _search(self, text: str) -> None:
+        self._result_list.clear()
+        with self._conn() as con:
+            rows = con.execute(
                 """
-                SELECT location_id, alias
-                FROM location_aliases
-                WHERE normalized LIKE ?
-                ORDER BY alias
-                LIMIT 200;
+                SELECT DISTINCT l.location_id, l.name
+                FROM locations l
+                LEFT JOIN location_aliases a USING (location_id)
+                WHERE l.name LIKE ? OR a.alias LIKE ?
+                ORDER BY l.name
                 """,
-                (f"{normalize(text)}%",),
+                (f"%{text}%", f"%{text}%"),
             )
+            for r in rows:
+                item = QListWidgetItem(r["name"] or f"(id {r['location_id']})")
+                item.setData(Qt.UserRole, r["location_id"])
+                self._result_list.addItem(item)
 
-        rows = cur.fetchall()
-        con.close()
-
-        self._alias_list.clear()
-        for r in rows:
-            item = QListWidgetItem(r["alias"])
-            item.setData(Qt.UserRole, int(r["location_id"]))
-            self._alias_list.addItem(item)
-
-    def _load_by_location_field(self, field: str, value: str) -> None:
-        if not value:
-            self._alias_list.clear()
+    def _on_select(self) -> None:
+        if not self._result_list.selectedItems():
             return
 
-        con = sqlite3.connect(self._db_path)
-        con.row_factory = sqlite3.Row
-        cur = con.cursor()
+        self._create_mode = False
+        self._finalize_btn.hide()
 
-        cur.execute(
-            f"""
-            SELECT la.location_id, la.alias
-            FROM locations l
-            JOIN location_aliases la ON la.location_id = l.location_id
-            WHERE l.{field} = ?
-            ORDER BY la.alias;
-            """,
-            (value,),
-        )
-
-        rows = cur.fetchall()
-        con.close()
-
-        self._alias_list.clear()
-        for r in rows:
-            item = QListWidgetItem(r["alias"])
-            item.setData(Qt.UserRole, int(r["location_id"]))
-            self._alias_list.addItem(item)
-
-    # --------------------------------------------------
-    # Selection + details
-    # --------------------------------------------------
-
-    def _on_alias_clicked(self, item: QListWidgetItem) -> None:
+        item = self._result_list.selectedItems()[0]
         self._current_location_id = item.data(Qt.UserRole)
-        self._load_location()
-        self._load_location_aliases()
-        self._save_btn.setEnabled(True)
 
-    def _load_location(self) -> None:
-        if self._current_location_id is None:
-            return
-
-        con = sqlite3.connect(self._db_path)
-        con.row_factory = sqlite3.Row
-        cur = con.cursor()
-
-        cur.execute(
-            """
-            SELECT location_id, lat, lon, name, place, wikidata
-            FROM locations
-            WHERE location_id = ?;
-            """,
-            (self._current_location_id,),
-        )
-        row = cur.fetchone()
-
-        cur.execute(
-            """
-            SELECT r.name
-            FROM location_regions lr
-            JOIN regions r ON r.region_id = lr.region_id
-            WHERE lr.location_id = ?
-            LIMIT 1;
-            """,
-            (self._current_location_id,),
-        )
-        region_row = cur.fetchone()
-
-        con.close()
-
-        if not row:
-            return
-
-        self._lbl_location_id.setText(str(row["location_id"]))
-        self._lbl_lat.setText(str(row["lat"]))
-        self._lbl_lon.setText(str(row["lon"]))
-        self._edit_name.setText(row["name"] or "")
-        self._edit_place.setText(row["place"] or "")
-        self._edit_wikidata.setText(row["wikidata"] or "")
-        self._lbl_region.setText(region_row["name"] if region_row else "-")
+        self._load_location(self._current_location_id)
 
     # --------------------------------------------------
-    # Alias handling
+    # Create mode
     # --------------------------------------------------
 
-    def _load_location_aliases(self) -> None:
-        self._location_aliases.clear()
+    def _enter_create_mode(self) -> None:
+        self._create_mode = True
+        self._current_location_id = None
+        self._result_list.clearSelection()
 
-        con = sqlite3.connect(self._db_path)
-        cur = con.cursor()
-        cur.execute(
-            "SELECT alias FROM location_aliases WHERE location_id = ? ORDER BY alias;",
-            (self._current_location_id,),
-        )
-        for (alias,) in cur.fetchall():
-            self._location_aliases.addItem(alias)
+        self._name_edit.clear()
+        self._place_edit.clear()
+        self._lat_edit.clear()
+        self._lon_edit.clear()
+        self._aliases_edit.clear()
 
-        con.close()
+        for w in (self._groups_list, self._regions_list):
+            for i in range(w.count()):
+                w.item(i).setSelected(False)
 
-    def _add_alias(self) -> None:
-        if not self._current_location_id:
-            return
-
-        alias = self._alias_input.text().strip()
-        if not alias:
-            return
-
-        con = sqlite3.connect(self._db_path)
-        cur = con.cursor()
-        cur.execute(
-            """
-            INSERT OR IGNORE INTO location_aliases
-                (location_id, alias, normalized)
-            VALUES (?, ?, ?);
-            """,
-            (self._current_location_id, alias, normalize(alias)),
-        )
-        con.commit()
-        con.close()
-
-        self._alias_input.clear()
-        self._load_location_aliases()
-
-    def _remove_alias(self) -> None:
-        if not self._current_location_id:
-            return
-
-        items = self._location_aliases.selectedItems()
-        if not items:
-            return
-
-        alias = items[0].text()
-
-        con = sqlite3.connect(self._db_path)
-        cur = con.cursor()
-        cur.execute(
-            """
-            DELETE FROM location_aliases
-            WHERE location_id = ?
-              AND normalized = ?;
-            """,
-            (self._current_location_id, normalize(alias)),
-        )
-        con.commit()
-        con.close()
-
-        self._load_location_aliases()
+        self._finalize_btn.show()
 
     # --------------------------------------------------
-    # Save location edits
+    # Load existing location
     # --------------------------------------------------
 
-    def _save_location_changes(self) -> None:
-        if self._current_location_id is None:
+    def _load_location(self, location_id: int) -> None:
+        with self._conn() as con:
+            loc = con.execute(
+                "SELECT * FROM locations WHERE location_id = ?", (location_id,)
+            ).fetchone()
+
+            self._name_edit.setText(loc["name"] or "")
+            self._place_edit.setText(loc["place"] or "")
+            self._lat_edit.setText(str(loc["lat"]))
+            self._lon_edit.setText(str(loc["lon"]))
+
+            aliases = con.execute(
+                "SELECT alias FROM location_aliases WHERE location_id = ?",
+                (location_id,),
+            )
+            self._aliases_edit.setPlainText("\n".join(a["alias"] for a in aliases))
+
+    # --------------------------------------------------
+    # Finalize creation
+    # --------------------------------------------------
+
+    def _finalize_entry(self) -> None:
+        try:
+            lat = float(self._lat_edit.text())
+            lon = float(self._lon_edit.text())
+        except ValueError:
+            QMessageBox.critical(self, "Invalid input", "Latitude/Longitude invalid.")
             return
 
-        con = sqlite3.connect(self._db_path)
-        cur = con.cursor()
+        aliases = _split_aliases(self._aliases_edit.toPlainText())
 
-        cur.execute(
-            """
-            UPDATE locations
-            SET name = ?, place = ?, wikidata = ?
-            WHERE location_id = ?;
-            """,
-            (
-                self._edit_name.text().strip() or None,
-                self._edit_place.text().strip() or None,
-                self._edit_wikidata.text().strip() or None,
-                self._current_location_id,
-            ),
-        )
+        try:
+            with self._conn() as con:
+                cur = con.execute(
+                    """
+                    INSERT INTO locations (lat, lon, name, place)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (
+                        lat,
+                        lon,
+                        self._name_edit.text() or None,
+                        self._place_edit.text() or None,
+                    ),
+                )
+                loc_id = cur.lastrowid
 
-        if cur.rowcount != 1:
-            con.rollback()
-            con.close()
-            raise RuntimeError("Unexpected update count")
+                for a in aliases:
+                    con.execute(
+                        """
+                        INSERT INTO location_aliases (location_id, alias, normalized)
+                        VALUES (?, ?, ?)
+                        """,
+                        (loc_id, a, a.lower()),
+                    )
 
-        con.commit()
-        con.close()
+                for item in self._groups_list.selectedItems():
+                    con.execute(
+                        """
+                        INSERT INTO location_groups (location_id, group_id)
+                        VALUES (?, ?)
+                        """,
+                        (loc_id, item.data(Qt.UserRole)),
+                    )
 
-        self._load_location()
+                for item in self._regions_list.selectedItems():
+                    con.execute(
+                        """
+                        INSERT INTO location_regions (location_id, region_id)
+                        VALUES (?, ?)
+                        """,
+                        (loc_id, item.data(Qt.UserRole)),
+                    )
 
-        self._edit_name.clearFocus()
-        self._edit_place.clearFocus()
-        self._edit_wikidata.clearFocus()
+            self.statusMessage.emit(f"Created location {loc_id}")
+            self._create_mode = False
+            self._finalize_btn.hide()
+            self._search(self._search_edit.text())
 
-        self.statusMessage.emit(
-            f"Saved location_id={self._current_location_id}"
-        )
+        except sqlite3.IntegrityError as e:
+            QMessageBox.critical(self, "Database error", str(e))
