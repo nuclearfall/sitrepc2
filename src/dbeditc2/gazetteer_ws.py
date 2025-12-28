@@ -8,15 +8,14 @@ from PySide6.QtWidgets import (
     QWidget,
     QListWidget,
     QListWidgetItem,
-    QLabel,
     QVBoxLayout,
     QHBoxLayout,
     QLineEdit,
     QPushButton,
-    QComboBox,
     QFormLayout,
     QPlainTextEdit,
     QMessageBox,
+    QComboBox,
 )
 
 from sitrepc2.config.paths import gazetteer_path
@@ -29,6 +28,14 @@ from sitrepc2.config.paths import gazetteer_path
 def _split_aliases(text: str) -> List[str]:
     raw = text.replace(",", "\n").replace(";", "\n")
     return sorted({a.strip() for a in raw.splitlines() if a.strip()})
+
+
+def _combo_set_by_user_data(combo: QComboBox, value: Optional[int]) -> None:
+    for i in range(combo.count()):
+        if combo.itemData(i) == value:
+            combo.setCurrentIndex(i)
+            return
+    combo.setCurrentIndex(0)
 
 
 # ------------------------------------------------------------
@@ -78,11 +85,9 @@ class GazetteerWorkspace(QWidget):
             "One alias per line, or comma / semicolon separated"
         )
 
-        self._groups_list = QListWidget(self)
-        self._groups_list.setSelectionMode(QListWidget.MultiSelection)
-
-        self._regions_list = QListWidget(self)
-        self._regions_list.setSelectionMode(QListWidget.MultiSelection)
+        # SINGLE selection via dropdowns (domain invariant)
+        self._group_combo = QComboBox(self)
+        self._region_combo = QComboBox(self)
 
         self._finalize_btn = QPushButton("Finalize Entry", self)
         self._finalize_btn.clicked.connect(self._finalize_entry)
@@ -94,8 +99,8 @@ class GazetteerWorkspace(QWidget):
         form.addRow("Latitude", self._lat_edit)
         form.addRow("Longitude", self._lon_edit)
         form.addRow("Aliases", self._aliases_edit)
-        form.addRow("Groups", self._groups_list)
-        form.addRow("Regions", self._regions_list)
+        form.addRow("Group", self._group_combo)
+        form.addRow("Region", self._region_combo)
         form.addRow(self._finalize_btn)
 
         # --------------------------------------------------
@@ -105,7 +110,6 @@ class GazetteerWorkspace(QWidget):
         main = QHBoxLayout(self)
         main.addLayout(search_layout, 1)
         main.addLayout(form, 2)
-
         self.setLayout(main)
 
         self._load_groups()
@@ -123,20 +127,18 @@ class GazetteerWorkspace(QWidget):
         return con
 
     def _load_groups(self) -> None:
-        self._groups_list.clear()
+        self._group_combo.clear()
+        self._group_combo.addItem("(None)", None)
         with self._conn() as con:
             for r in con.execute("SELECT group_id, name FROM groups ORDER BY name"):
-                item = QListWidgetItem(r["name"])
-                item.setData(Qt.UserRole, r["group_id"])
-                self._groups_list.addItem(item)
+                self._group_combo.addItem(r["name"], r["group_id"])
 
     def _load_regions(self) -> None:
-        self._regions_list.clear()
+        self._region_combo.clear()
+        self._region_combo.addItem("(None)", None)
         with self._conn() as con:
             for r in con.execute("SELECT region_id, name FROM regions ORDER BY name"):
-                item = QListWidgetItem(r["name"])
-                item.setData(Qt.UserRole, r["region_id"])
-                self._regions_list.addItem(item)
+                self._region_combo.addItem(r["name"], r["region_id"])
 
     # --------------------------------------------------
     # Search / select
@@ -187,9 +189,9 @@ class GazetteerWorkspace(QWidget):
         self._lon_edit.clear()
         self._aliases_edit.clear()
 
-        for w in (self._groups_list, self._regions_list):
-            for i in range(w.count()):
-                w.item(i).setSelected(False)
+        # reset dropdowns
+        self._group_combo.setCurrentIndex(0)
+        self._region_combo.setCurrentIndex(0)
 
         self._finalize_btn.show()
 
@@ -209,10 +211,34 @@ class GazetteerWorkspace(QWidget):
             self._lon_edit.setText(str(loc["lon"]))
 
             aliases = con.execute(
-                "SELECT alias FROM location_aliases WHERE location_id = ?",
+                "SELECT alias FROM location_aliases WHERE location_id = ? ORDER BY alias",
                 (location_id,),
-            )
+            ).fetchall()
             self._aliases_edit.setPlainText("\n".join(a["alias"] for a in aliases))
+
+            # Group: expect 0..1, but handle dirty DB gracefully
+            group_rows = con.execute(
+                "SELECT group_id FROM location_groups WHERE location_id = ?",
+                (location_id,),
+            ).fetchall()
+            if len(group_rows) > 1:
+                self.statusMessage.emit(
+                    f"Warning: location_id={location_id} has multiple groups; showing first."
+                )
+            group_id = group_rows[0]["group_id"] if group_rows else None
+            _combo_set_by_user_data(self._group_combo, group_id)
+
+            # Region: expect 0..1, but handle dirty DB gracefully
+            region_rows = con.execute(
+                "SELECT region_id FROM location_regions WHERE location_id = ?",
+                (location_id,),
+            ).fetchall()
+            if len(region_rows) > 1:
+                self.statusMessage.emit(
+                    f"Warning: location_id={location_id} has multiple regions; showing first."
+                )
+            region_id = region_rows[0]["region_id"] if region_rows else None
+            _combo_set_by_user_data(self._region_combo, region_id)
 
     # --------------------------------------------------
     # Finalize creation
@@ -227,6 +253,9 @@ class GazetteerWorkspace(QWidget):
             return
 
         aliases = _split_aliases(self._aliases_edit.toPlainText())
+
+        group_id = self._group_combo.currentData()
+        region_id = self._region_combo.currentData()
 
         try:
             with self._conn() as con:
@@ -244,6 +273,7 @@ class GazetteerWorkspace(QWidget):
                 )
                 loc_id = cur.lastrowid
 
+                # aliases
                 for a in aliases:
                     con.execute(
                         """
@@ -253,22 +283,24 @@ class GazetteerWorkspace(QWidget):
                         (loc_id, a, a.lower()),
                     )
 
-                for item in self._groups_list.selectedItems():
+                # single group
+                if group_id is not None:
                     con.execute(
                         """
                         INSERT INTO location_groups (location_id, group_id)
                         VALUES (?, ?)
                         """,
-                        (loc_id, item.data(Qt.UserRole)),
+                        (loc_id, group_id),
                     )
 
-                for item in self._regions_list.selectedItems():
+                # single region
+                if region_id is not None:
                     con.execute(
                         """
                         INSERT INTO location_regions (location_id, region_id)
                         VALUES (?, ?)
                         """,
-                        (loc_id, item.data(Qt.UserRole)),
+                        (loc_id, region_id),
                     )
 
             self.statusMessage.emit(f"Created location {loc_id}")
