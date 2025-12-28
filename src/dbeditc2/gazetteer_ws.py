@@ -398,7 +398,10 @@ class GazetteerWorkspace(QWidget):
         location_id = encode_coord_u64(lat, lon)
 
         # Collect aliases
-        aliases = [self.alias_list.item(i).text() for i in range(self.alias_list.count())]
+        aliases = [
+            self.alias_list.item(i).text()
+            for i in range(self.alias_list.count())
+        ]
 
         group_id = self.group_combo.currentData()
         region_id = self.region_combo.currentData()
@@ -408,9 +411,13 @@ class GazetteerWorkspace(QWidget):
 
         try:
             with self._conn() as con:
+                # --------------------------------------------------
+                # Insert location
+                # --------------------------------------------------
                 con.execute(
                     """
-                    INSERT INTO locations (location_id, lat, lon, name, place, osm_id, wikidata)
+                    INSERT INTO locations
+                        (location_id, lat, lon, name, place, osm_id, wikidata)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
@@ -424,104 +431,113 @@ class GazetteerWorkspace(QWidget):
                     ),
                 )
 
-                for a in aliases:
+                # --------------------------------------------------
+                # Insert aliases
+                # --------------------------------------------------
+                for alias in aliases:
                     con.execute(
                         """
-                        INSERT INTO location_aliases (location_id, alias, normalized)
+                        INSERT INTO location_aliases
+                            (location_id, alias, normalized)
                         VALUES (?, ?, ?)
                         """,
-                        (location_id, a, a.lower()),
+                        (location_id, alias, alias.lower()),
                     )
 
-                # single group/region pivots (optional)
+                # --------------------------------------------------
+                # Insert single group / region pivots (optional)
+                # --------------------------------------------------
                 if group_id is not None:
                     con.execute(
-                        "INSERT INTO location_groups (location_id, group_id) VALUES (?, ?)",
+                        """
+                        INSERT INTO location_groups
+                            (location_id, group_id)
+                        VALUES (?, ?)
+                        """,
                         (location_id, group_id),
                     )
+
                 if region_id is not None:
                     con.execute(
-                        "INSERT INTO location_regions (location_id, region_id) VALUES (?, ?)",
+                        """
+                        INSERT INTO location_regions
+                            (location_id, region_id)
+                        VALUES (?, ?)
+                        """,
                         (location_id, region_id),
                     )
 
-            QMessageBox.information(self, "Created", f"Location {location_id} created.")
+            QMessageBox.information(
+                self,
+                "Created",
+                f"Location {location_id} created.",
+            )
             self.statusMessage.emit(f"Created location {location_id}")
 
-            # Refresh search results and load new record to prove it persisted
-            self._search(self.search_edit.text())
+            # Reload newly created record
             self._load_location(location_id)
 
         except sqlite3.IntegrityError as e:
             QMessageBox.critical(self, "Database error", str(e))
+
 
     # ------------------------------------------------------------------
     # Save existing
     # ------------------------------------------------------------------
 
     def _save_existing(self) -> None:
-        if not self._current_location_id:
+        if not self._location_id:
             return
 
-        location_id = self._current_location_id
-
-        # Note: We do NOT recompute location_id on save; changing lat/lon would require rekeying.
-        # We allow editing of lat/lon fields in UI but we do not persist them here.
-        # If you want lat/lon editable for existing entries, we must implement a safe rekey strategy.
-
-        aliases = [self.alias_list.item(i).text() for i in range(self.alias_list.count())]
         group_id = self.group_combo.currentData()
         region_id = self.region_combo.currentData()
 
-        osm_id = self.osm_edit.text().strip() or None
-        wikidata = self.wikidata_edit.text().strip() or None
+        with self._conn() as con:
+            con.execute(
+                """
+                UPDATE locations
+                SET name=?, place=?, osm_id=?, wikidata=?
+                WHERE location_id=?
+                """,
+                (
+                    self.name_edit.text() or None,
+                    self.place_edit.text() or None,
+                    self.osm_edit.text() or None,
+                    self.wikidata_edit.text() or None,
+                    self._location_id,
+                ),
+            )
 
-        try:
-            with self._conn() as con:
+            con.execute("DELETE FROM location_aliases WHERE location_id=?", (self._location_id,))
+            for i in range(self.alias_list.count()):
+                alias = self.alias_list.item(i).text()
                 con.execute(
                     """
-                    UPDATE locations
-                    SET name = ?, place = ?, osm_id = ?, wikidata = ?
-                    WHERE location_id = ?
+                    INSERT INTO location_aliases
+                    (location_id, alias, normalized)
+                    VALUES (?, ?, ?)
                     """,
-                    (
-                        self.name_edit.text().strip() or None,
-                        self.place_edit.text().strip() or None,
-                        osm_id,
-                        wikidata,
-                        location_id,
-                    ),
+                    (self._location_id, alias, alias.lower()),
                 )
 
-                # Replace aliases (simple + deterministic)
-                con.execute("DELETE FROM location_aliases WHERE location_id = ?", (location_id,))
-                for a in aliases:
-                    con.execute(
-                        """
-                        INSERT INTO location_aliases (location_id, alias, normalized)
-                        VALUES (?, ?, ?)
-                        """,
-                        (location_id, a, a.lower()),
-                    )
+            # NEW: enforce single group / region
+            con.execute("DELETE FROM location_groups WHERE location_id=?", (self._location_id,))
+            if group_id is not None:
+                con.execute(
+                    "INSERT INTO location_groups (location_id, group_id) VALUES (?, ?)",
+                    (self._location_id, group_id),
+                )
 
-                # Enforce single group/region: delete then insert at most one
-                con.execute("DELETE FROM location_groups WHERE location_id = ?", (location_id,))
-                if group_id is not None:
-                    con.execute(
-                        "INSERT INTO location_groups (location_id, group_id) VALUES (?, ?)",
-                        (location_id, group_id),
-                    )
+            con.execute("DELETE FROM location_regions WHERE location_id=?", (self._location_id,))
+            if region_id is not None:
+                con.execute(
+                    "INSERT INTO location_regions (location_id, region_id) VALUES (?, ?)",
+                    (self._location_id, region_id),
+                )
 
-                con.execute("DELETE FROM location_regions WHERE location_id = ?", (location_id,))
-                if region_id is not None:
-                    con.execute(
-                        "INSERT INTO location_regions (location_id, region_id) VALUES (?, ?)",
-                        (location_id, region_id),
-                    )
+        self.statusMessage.emit("Location updated")
+        self.locationUpdated.emit(self._location_id)
 
-            QMessageBox.information(self, "Saved", "Changes saved.")
-            self.statusMessage.emit("Saved changes")
-            self._load_location(location_id)
 
         except sqlite3.IntegrityError as e:
             QMessageBox.critical(self, "Database error", str(e))
