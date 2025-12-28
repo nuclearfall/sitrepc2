@@ -88,12 +88,16 @@ def lss_scope_event(
     """
 
     event_span = doc[event.doc_start_token_index : event.doc_end_token_index]
+    assert (any(e.label_ == "LOCATION" for e in doc.ents)), "Not any LOCATION entity exists"
     assert any(
         e.label_ == "LOCATION"
         and e.start < event.doc_end_token_index
         and e.end > event.doc_start_token_index
         for e in doc.ents
     ), "No LOCATION entity overlaps Holmes event span"
+
+
+
 
     # -------------------------------------------------
     # ROLE CANDIDATES (HOLMES-DERIVED ONLY)
