@@ -1,7 +1,10 @@
 # widgets/loc_search_panel.py
 from __future__ import annotations
 
+import os
 import sqlite3
+import sys
+import threading
 from typing import Optional
 
 from PySide6.QtCore import Qt, Signal
@@ -16,6 +19,10 @@ from PySide6.QtWidgets import (
 )
 
 from sitrepc2.config.paths import gazetteer_path
+
+
+def _dbg(msg: str) -> None:
+    print(f"[loc_search_panel][tid={threading.get_ident()}] {msg}", file=sys.stderr, flush=True)
 
 
 class LocationSearchPanel(QWidget):
@@ -37,6 +44,13 @@ class LocationSearchPanel(QWidget):
         super().__init__(parent)
 
         self._db_path = gazetteer_path()
+        _dbg(f"INIT gazetteer_path() -> {self._db_path!r}")
+        try:
+            exists = os.path.exists(self._db_path)
+            size = os.path.getsize(self._db_path) if exists else -1
+            _dbg(f"DB exists={exists} size={size}")
+        except Exception as e:
+            _dbg(f"DB stat error: {e!r}")
 
         self.lookup_mode = QComboBox()
         self.lookup_mode.addItems([
@@ -52,7 +66,7 @@ class LocationSearchPanel(QWidget):
         self.results = QListWidget()
 
         self.add_new_btn = QPushButton("Add New Location")
-        self.add_new_btn.clicked.connect(self.createRequested.emit)
+        self.add_new_btn.clicked.connect(self._on_add_new_clicked)
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.lookup_mode)
@@ -69,28 +83,34 @@ class LocationSearchPanel(QWidget):
 
         self._run_search("")
 
+    def _on_add_new_clicked(self) -> None:
+        _dbg("Add New Location clicked -> createRequested.emit()")
+        self.createRequested.emit()
+
     def _conn(self) -> sqlite3.Connection:
+        _dbg(f"OPEN DB: {self._db_path!r}")
         con = sqlite3.connect(self._db_path)
         con.row_factory = sqlite3.Row
         con.execute("PRAGMA foreign_keys = ON;")
+        fk = con.execute("PRAGMA foreign_keys;").fetchone()[0]
+        _dbg(f"PRAGMA foreign_keys={fk}")
         return con
 
     def _run_search(self, text: str) -> None:
-        self.results.clear()
         mode = self.lookup_mode.currentText()
+        _dbg(f"RUN search mode={mode!r} text={text!r}")
+        self.results.clear()
 
         if mode == self.MODE_LOCATIONS:
             self._search_locations(text)
         elif mode == self.MODE_ALIASES:
             self._search_aliases(text)
-        # elif mode == self.MODE_OSM:
-        #     self._lookup_identifier("osm_id", text)
         elif mode == self.MODE_WIKIDATA:
             self._lookup_identifier("wikidata", text)
 
     def _search_locations(self, text: str) -> None:
         with self._conn() as con:
-            rows = con.execute(
+            rows = list(con.execute(
                 """
                 SELECT DISTINCT
                     l.location_id,
@@ -105,8 +125,8 @@ class LocationSearchPanel(QWidget):
                 ORDER BY l.name, r.name, l.place
                 """,
                 (f"%{text}%", f"%{text}%"),
-            )
-
+            ))
+            _dbg(f"search_locations rows={len(rows)}")
             for row in rows:
                 label = (
                     f"{row['name']} "
@@ -118,7 +138,7 @@ class LocationSearchPanel(QWidget):
 
     def _search_aliases(self, text: str) -> None:
         with self._conn() as con:
-            rows = con.execute(
+            rows = list(con.execute(
                 """
                 SELECT
                     a.alias,
@@ -134,8 +154,8 @@ class LocationSearchPanel(QWidget):
                 ORDER BY a.alias
                 """,
                 (f"%{text}%",),
-            )
-
+            ))
+            _dbg(f"search_aliases rows={len(rows)}")
             for row in rows:
                 label = (
                     f"{row['alias']} → {row['name']} "
@@ -147,7 +167,9 @@ class LocationSearchPanel(QWidget):
 
     def _lookup_identifier(self, field: str, value: str) -> None:
         value = value.strip()
+        _dbg(f"lookup_identifier field={field!r} value={value!r}")
         if not value:
+            _dbg("lookup_identifier early return: empty value")
             return
 
         with self._conn() as con:
@@ -156,9 +178,11 @@ class LocationSearchPanel(QWidget):
                 (value,),
             ).fetchone()
 
+            _dbg(f"lookup_identifier found={bool(row)}")
             if row:
-                # DO NOT cast — keep full 64-bit value
-                self.locationSelected.emit(row["location_id"])
+                lid = row["location_id"]
+                _dbg(f"emit locationSelected lid={lid!r} type={type(lid)}")
+                self.locationSelected.emit(lid)
             else:
                 self.statusMessage.emit(
                     f"No location found for {field}={value}"
@@ -166,6 +190,6 @@ class LocationSearchPanel(QWidget):
 
     def _on_item_clicked(self, item: QListWidgetItem) -> None:
         location_id = item.data(Qt.UserRole)
+        _dbg(f"itemClicked -> lid={location_id!r} type={type(location_id)}")
         if location_id is not None:
-            # DO NOT cast — keep full 64-bit value
             self.locationSelected.emit(location_id)
