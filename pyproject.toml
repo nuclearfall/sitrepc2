@@ -76,6 +76,7 @@ allow-direct-references = true
 packages = [
     "src/sitrepc2",
     "src/docruleredit",
+    "src/dbeditc2",
 ]
 
 [tool.hatch.build.targets.sdist]
