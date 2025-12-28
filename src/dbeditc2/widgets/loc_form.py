@@ -304,7 +304,7 @@ class LocationForm(QWidget):
                     """
                     INSERT INTO locations
                     (location_id, lat, lon, name, place, wikidata)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     (
                         location_id,
