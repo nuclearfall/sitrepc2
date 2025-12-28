@@ -23,7 +23,7 @@ class LocationSearchPanel(QWidget):
     Left-hand search panel for gazetteer locations.
     """
 
-    locationSelected = Signal(int)   # location_id
+    locationSelected = Signal(object)   # location_id
     createRequested = Signal()       # NEW
     statusMessage = Signal(str)
 
@@ -151,7 +151,7 @@ class LocationSearchPanel(QWidget):
             ).fetchone()
 
             if row:
-                self.locationSelected.emit(int(row["location_id"]))
+                self.locationSelected.emit(row["location_id"])
             else:
                 self.statusMessage.emit(f"No location found for {field}={value}")
 

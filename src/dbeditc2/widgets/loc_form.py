@@ -4,7 +4,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Optional, List
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Signal, Slot
 from PySide6.QtWidgets import (
     QWidget,
     QLabel,
@@ -138,7 +138,7 @@ class LocationForm(QWidget):
     # --------------------------------------------------
     # Public API
     # --------------------------------------------------
-
+    @Slot(object)
     def load_location(self, location_id: int) -> None:
         """Load an existing location."""
         self._location_id = location_id
