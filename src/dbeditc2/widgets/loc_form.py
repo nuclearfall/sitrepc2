@@ -60,7 +60,7 @@ class LocationForm(QWidget):
         self.lon_edit = QLineEdit()
         self.name_edit = QLineEdit()
         self.place_edit = QLineEdit()
-        self.osm_edit = QLineEdit()
+        # self.osm_edit = QLineEdit()
         self.wikidata_edit = QLineEdit()
 
         self.alias_list = QListWidget()
@@ -85,7 +85,7 @@ class LocationForm(QWidget):
         form.addRow("Longitude", self.lon_edit)
         form.addRow("Name", self.name_edit)
         form.addRow("Place", self.place_edit)
-        form.addRow("OSM ID", self.osm_edit)
+        # form.addRow("OSM ID", self.osm_edit)
         form.addRow("Wikidata", self.wikidata_edit)
 
         form.addRow("Aliases", self.alias_list)
@@ -200,7 +200,7 @@ class LocationForm(QWidget):
             self.lon_edit,
             self.name_edit,
             self.place_edit,
-            self.osm_edit,
+            #self.osm_edit,
             self.wikidata_edit,
         ):
             w.clear()
@@ -250,7 +250,7 @@ class LocationForm(QWidget):
                 (
                     self.name_edit.text() or None,
                     self.place_edit.text() or None,
-                    self.osm_edit.text() or None,
+                    # self.osm_edit.text() or None,
                     self.wikidata_edit.text() or None,
                     self._location_id,
                 ),
@@ -312,7 +312,7 @@ class LocationForm(QWidget):
                         lon,
                         self.name_edit.text() or None,
                         self.place_edit.text() or None,
-                        self.osm_edit.text() or None,
+                        # self.osm_edit.text() or None,
                         self.wikidata_edit.text() or None,
                     ),
                 )
