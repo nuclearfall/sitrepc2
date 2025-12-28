@@ -110,7 +110,7 @@ class LocationSearchPanel(QWidget):
             for row in rows:
                 label = f"{row['name']} ({row['region_name'] or '—'}/{row['place'] or '—'})"
                 item = QListWidgetItem(label)
-                item.setData(Qt.UserRole, int(row["location_id"]))
+                item.setData(Qt.UserRole, row["location_id"])
                 self.results.addItem(item)
 
     def _search_aliases(self, text: str) -> None:
@@ -136,7 +136,7 @@ class LocationSearchPanel(QWidget):
             for row in rows:
                 label = f"{row['alias']} → {row['name']} ({row['region_name'] or '—'}/{row['place'] or '—'})"
                 item = QListWidgetItem(label)
-                item.setData(Qt.UserRole, int(row["location_id"]))
+                item.setData(Qt.UserRole, row["location_id"])
                 self.results.addItem(item)
 
     def _lookup_identifier(self, field: str, value: str) -> None:
@@ -158,4 +158,4 @@ class LocationSearchPanel(QWidget):
     def _on_item_clicked(self, item: QListWidgetItem) -> None:
         location_id = item.data(Qt.UserRole)
         if location_id is not None:
-            self.locationSelected.emit(int(location_id))
+            self.locationSelected.emit(location_id)

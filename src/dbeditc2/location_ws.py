@@ -9,7 +9,7 @@ from .widgets.loc_form import LocationForm
 
 
 class LocationWorkspace(QWidget):
-    statusMessage = Signal(str)
+    statusMessage = Signal(object)
     
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
