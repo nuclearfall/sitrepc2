@@ -172,4 +172,4 @@ class LocationCandidateNode(DomNode):
     # Review metadata
     confidence: Optional[float]
     persists: bool
-    dist_from_loc: float
+    dist_from_front: float

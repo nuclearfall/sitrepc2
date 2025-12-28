@@ -72,3 +72,24 @@ class EventMatch:
     doc_end_token_index: int
 
     raw_match: dict[str, Any]
+
+    # -------------------------------
+    # Holmes accessors (thin only)
+    # -------------------------------
+
+    def iter_word_matches(self) -> Iterable[WordMatch]:
+        """
+        Yield WordMatch wrappers for Holmes 'word_matches'.
+        No filtering. No interpretation.
+        """
+        for wm in self.raw_match.get("word_matches", []):
+            yield WordMatch(**wm)
+
+    def iter_content_words(self) -> Iterable[WordMatch]:
+        """
+        Yield content-bearing WordMatches only.
+        This mirrors Holmes semantics and is still structural.
+        """
+        for wm in self.iter_word_matches():
+            if wm.match_type:
+                yield wm

@@ -205,6 +205,7 @@ CREATE TABLE dom_location_candidate (
 
     -- Review metadata
     confidence REAL,
+    dist_from_front REAL,
     selected BOOLEAN NOT NULL,
     persists BOOLEAN NOT NULL,     -- session-only vs patch-eligible
 

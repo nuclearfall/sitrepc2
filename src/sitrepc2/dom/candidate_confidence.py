@@ -190,7 +190,6 @@ def _normalize_and_order(
         ordered.append(
             (c, CandidateConfidence(score=norm, signals=spatial_signals.get(c, SpatialSignals())))
         )
-
     # Order by descending confidence
     ordered.sort(key=lambda x: x[1].score, reverse=True)
     return ordered

@@ -10,6 +10,9 @@ from shapely.geometry import LineString, MultiLineString, Point
 from shapely.ops import nearest_points, unary_union
 from pyproj import Transformer
 
+from config.paths import loc_polyline_path
+
+
 Coord = Tuple[float, float]  # (lon, lat)
 
 
@@ -116,7 +119,7 @@ class Frontline:
 
 
 def load_frontline(
-    path: str | Path = "data/external/frontline/loc_polylines.geojson",
+    path: str | Path = loc_polyline_path(),
 ) -> Frontline | None:
     p = Path(path)
     if not p.exists():

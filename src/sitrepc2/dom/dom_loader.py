@@ -15,7 +15,6 @@ from nodes import (
     Actor,
 )
 
-
 # ============================================================
 # SNAPSHOT RESOLUTION
 # ============================================================
@@ -197,6 +196,8 @@ def apply_location_candidates(
             place,
             wikidata,
             confidence,
+            dist_from_front,
+            loc_
             selected,
             persists
         FROM dom_location_candidate
@@ -214,6 +215,7 @@ def apply_location_candidates(
         place,
         wikidata,
         confidence,
+        dist_from_front,
         selected,
         persists,
     ) in rows:
@@ -229,7 +231,7 @@ def apply_location_candidates(
             confidence=confidence,
             persists=bool(persists),
             selected=bool(selected),
-            neartest_loc=frontline(lat, lon)
+            dist_from_front=dist_from_front,
         )
         nodes[location_node_id].add_child(candidate)
 

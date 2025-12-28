@@ -205,6 +205,7 @@ def persist_location_candidates(
                 place,
                 wikidata,
                 confidence,
+                dist_from_front,
                 selected,
                 persists
             )
@@ -220,6 +221,7 @@ def persist_location_candidates(
                 child.place,
                 child.wikidata,
                 child.confidence,
+                child.dist_from_front,
                 child.selected,
                 child.persists,
             ),
