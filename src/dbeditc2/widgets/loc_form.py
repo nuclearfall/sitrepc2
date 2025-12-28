@@ -161,9 +161,10 @@ class LocationForm(QWidget):
             self.lon_edit.setText(str(loc["lon"]))
             self.name_edit.setText(loc["name"] or "")
             self.place_edit.setText(loc["place"] or "")
-            self.osm_edit.setText(loc.get("osm_id") or "")
-            self.wikidata_edit.setText(loc.get("wikidata") or "")
-
+            self.osm_edit.setText(loc["osm_id"] if "osm_id" in loc.keys() and loc["osm_id"] else "")
+            self.wikidata_edit.setText(
+                loc["wikidata"] if "wikidata" in loc.keys() and loc["wikidata"] else ""
+            )
             # aliases
             self.alias_list.clear()
             for a in con.execute(
