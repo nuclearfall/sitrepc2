@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from dbeditc2.gazetteer_ws import GazetteerWorkspace
+from dbeditc2.location_ws import LocationWorkspace
 from dbeditc2.lexicon_ws import LexiconWorkspace
 
 
@@ -36,13 +36,13 @@ class MainWindow(QMainWindow):
         self._tabs = QTabWidget(self)
         self.setCentralWidget(self._tabs)
 
-        # Gazetteer workspace
-        self._gazetteer_ws = GazetteerWorkspace(self)
-        self._gazetteer_ws.statusMessage.connect(self._show_status)
+        # Location workspace
+        self._location_ws = LocationWorkspace(self)
+        self._location_ws.statusMessage.connect(self._show_status)
 
         self._tabs.addTab(
-            self._gazetteer_ws,
-            "Gazetteer",
+            self._location_ws,
+            "Locations",
         )
 
         # Lexicon workspace
