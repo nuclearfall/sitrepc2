@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtWidgets import QWidget, QHBoxLayout
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Signal, Slot
 
 from .widgets.loc_search_panel import LocationSearchPanel
 from .widgets.loc_form import LocationForm
