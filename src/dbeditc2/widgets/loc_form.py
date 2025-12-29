@@ -103,7 +103,8 @@ class LocationForm(QWidget):
 
         form.addRow("Aliases", self.alias_list)
         form.addRow(self.alias_edit)
-        form.addRow(self.add_alias_btn, self.remove_alias_btn)
+        form.addRow(self.add_alias_btn)
+        form.addRow(self.remove_alias_btn)
 
         form.addRow("Group", self.group_combo)
         form.addRow("Region", self.region_combo)
@@ -114,10 +115,11 @@ class LocationForm(QWidget):
         # --------------------------------------------------
         # Set widget dimensions
         # --------------------------------------------------
-        self.save_btn.setFixedWidth(140)
-        self.finalize_btn.setFixedWidth(140)
-        self.add_alias_btn.setFixedWidth(120)
-        self.remove_alias_btn.setFixedWidth(120)
+        # self.alias_edit.setFixedWidth(
+        # self.save_btn.setFixedWidth(140)
+        # self.finalize_btn.setFixedWidth(140)
+        # self.add_alias_btn.setFixedWidth(120)
+        # self.remove_alias_btn.setFixedWidth(120)
 
         # --------------------------------------------------
         # Signals
