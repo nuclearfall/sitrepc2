@@ -345,138 +345,138 @@ class LocationForm(QWidget):
         self.save_btn.show()
         self.finalize_btn.hide()
 
-def _save_existing(self) -> None:
-    _dbg(
-        f"SAVE existing clicked; "
-        f"_location_id={self._location_id!r} "
-        f"_location_ids={self._location_ids!r}"
-    )
+    def _save_existing(self) -> None:
+        _dbg(
+            f"SAVE existing clicked; "
+            f"_location_id={self._location_id!r} "
+            f"_location_ids={self._location_ids!r}"
+        )
 
-    if not self._location_ids:
-        _dbg("SAVE aborted: no selected locations")
-        return
+        if not self._location_ids:
+            _dbg("SAVE aborted: no selected locations")
+            return
 
-    # ------------------------------------------------------------------
-    # MULTI-SELECTION: ALIASES ONLY
-    # ------------------------------------------------------------------
-    if len(self._location_ids) > 1:
-        _dbg("SAVE multi-selection -> alias-only mode")
+        # ------------------------------------------------------------------
+        # MULTI-SELECTION: ALIASES ONLY
+        # ------------------------------------------------------------------
+        if len(self._location_ids) > 1:
+            _dbg("SAVE multi-selection -> alias-only mode")
 
-        with self._conn() as con:
-            for lid in self._location_ids:
-                cur = con.execute(
-                    "DELETE FROM location_aliases WHERE location_id=?",
-                    (lid,),
-                )
-                _dbg(
-                    f"DELETE aliases location_id={lid} "
-                    f"rowcount={cur.rowcount}"
-                )
-
-                for i in range(self.alias_list.count()):
-                    alias = self.alias_list.item(i).text()
+            with self._conn() as con:
+                for lid in self._location_ids:
                     cur = con.execute(
-                        """
-                        INSERT INTO location_aliases
-                        (location_id, alias, normalized)
-                        VALUES (?, ?, ?)
-                        """,
-                        (lid, alias, alias.lower()),
+                        "DELETE FROM location_aliases WHERE location_id=?",
+                        (lid,),
                     )
                     _dbg(
-                        f"INSERT alias {alias!r} "
-                        f"location_id={lid} "
+                        f"DELETE aliases location_id={lid} "
                         f"rowcount={cur.rowcount}"
                     )
 
-        self.statusMessage.emit(
-            f"Aliases updated for {len(self._location_ids)} locations"
-        )
-        return
+                    for i in range(self.alias_list.count()):
+                        alias = self.alias_list.item(i).text()
+                        cur = con.execute(
+                            """
+                            INSERT INTO location_aliases
+                            (location_id, alias, normalized)
+                            VALUES (?, ?, ?)
+                            """,
+                            (lid, alias, alias.lower()),
+                        )
+                        _dbg(
+                            f"INSERT alias {alias!r} "
+                            f"location_id={lid} "
+                            f"rowcount={cur.rowcount}"
+                        )
 
-    # ------------------------------------------------------------------
-    # SINGLE SELECTION: ORIGINAL FULL SAVE BEHAVIOR
-    # ------------------------------------------------------------------
-    lid = self._location_ids[0]
-    _dbg(f"SAVE single location -> full update location_id={lid}")
+            self.statusMessage.emit(
+                f"Aliases updated for {len(self._location_ids)} locations"
+            )
+            return
 
-    with self._conn() as con:
-        cur = con.execute(
-            """
-            UPDATE locations
-            SET name=?, place=?, wikidata=?
-            WHERE location_id=?
-            """,
-            (
-                self.name_edit.text() or None,
-                self.place_edit.text() or None,
-                self.wikidata_edit.text() or None,
-                lid,
-            ),
-        )
-        _dbg(
-            f"UPDATE locations rowcount={cur.rowcount} "
-            f"total_changes={con.total_changes}"
-        )
+        # ------------------------------------------------------------------
+        # SINGLE SELECTION: ORIGINAL FULL SAVE BEHAVIOR
+        # ------------------------------------------------------------------
+        lid = self._location_ids[0]
+        _dbg(f"SAVE single location -> full update location_id={lid}")
 
-        cur = con.execute(
-            "DELETE FROM location_aliases WHERE location_id=?",
-            (lid,),
-        )
-        _dbg(f"DELETE location_aliases rowcount={cur.rowcount}")
-
-        for i in range(self.alias_list.count()):
-            alias = self.alias_list.item(i).text()
+        with self._conn() as con:
             cur = con.execute(
                 """
-                INSERT INTO location_aliases
-                (location_id, alias, normalized)
-                VALUES (?, ?, ?)
+                UPDATE locations
+                SET name=?, place=?, wikidata=?
+                WHERE location_id=?
                 """,
-                (lid, alias, alias.lower()),
+                (
+                    self.name_edit.text() or None,
+                    self.place_edit.text() or None,
+                    self.wikidata_edit.text() or None,
+                    lid,
+                ),
             )
-            _dbg(f"INSERT alias {alias!r} rowcount={cur.rowcount}")
+            _dbg(
+                f"UPDATE locations rowcount={cur.rowcount} "
+                f"total_changes={con.total_changes}"
+            )
 
-        cur = con.execute(
-            "DELETE FROM location_groups WHERE location_id=?",
-            (lid,),
-        )
-        _dbg(f"DELETE location_groups rowcount={cur.rowcount}")
-
-        cur = con.execute(
-            "DELETE FROM location_regions WHERE location_id=?",
-            (lid,),
-        )
-        _dbg(f"DELETE location_regions rowcount={cur.rowcount}")
-
-        gid = self.group_combo.currentData()
-        rid = self.region_combo.currentData()
-        _dbg(f"current group={gid!r} region={rid!r}")
-
-        if gid is not None:
             cur = con.execute(
-                "INSERT INTO location_groups VALUES (?, ?)",
-                (lid, gid),
+                "DELETE FROM location_aliases WHERE location_id=?",
+                (lid,),
             )
-            _dbg(f"INSERT location_groups rowcount={cur.rowcount}")
+            _dbg(f"DELETE location_aliases rowcount={cur.rowcount}")
 
-        if rid is not None:
+            for i in range(self.alias_list.count()):
+                alias = self.alias_list.item(i).text()
+                cur = con.execute(
+                    """
+                    INSERT INTO location_aliases
+                    (location_id, alias, normalized)
+                    VALUES (?, ?, ?)
+                    """,
+                    (lid, alias, alias.lower()),
+                )
+                _dbg(f"INSERT alias {alias!r} rowcount={cur.rowcount}")
+
             cur = con.execute(
-                "INSERT INTO location_regions VALUES (?, ?)",
-                (lid, rid),
+                "DELETE FROM location_groups WHERE location_id=?",
+                (lid,),
             )
-            _dbg(f"INSERT location_regions rowcount={cur.rowcount}")
+            _dbg(f"DELETE location_groups rowcount={cur.rowcount}")
 
-        exists = con.execute(
-            "SELECT COUNT(*) FROM locations WHERE location_id=?",
-            (lid,),
-        ).fetchone()[0]
-        _dbg(f"VERIFY locations exists after save -> {exists}")
+            cur = con.execute(
+                "DELETE FROM location_regions WHERE location_id=?",
+                (lid,),
+            )
+            _dbg(f"DELETE location_regions rowcount={cur.rowcount}")
 
-        _dbg(f"END SAVE total_changes={con.total_changes}")
+            gid = self.group_combo.currentData()
+            rid = self.region_combo.currentData()
+            _dbg(f"current group={gid!r} region={rid!r}")
 
-    self.statusMessage.emit("Location updated")
-    self.locationUpdated.emit(lid)
+            if gid is not None:
+                cur = con.execute(
+                    "INSERT INTO location_groups VALUES (?, ?)",
+                    (lid, gid),
+                )
+                _dbg(f"INSERT location_groups rowcount={cur.rowcount}")
+
+            if rid is not None:
+                cur = con.execute(
+                    "INSERT INTO location_regions VALUES (?, ?)",
+                    (lid, rid),
+                )
+                _dbg(f"INSERT location_regions rowcount={cur.rowcount}")
+
+            exists = con.execute(
+                "SELECT COUNT(*) FROM locations WHERE location_id=?",
+                (lid,),
+            ).fetchone()[0]
+            _dbg(f"VERIFY locations exists after save -> {exists}")
+
+            _dbg(f"END SAVE total_changes={con.total_changes}")
+
+        self.statusMessage.emit("Location updated")
+        self.locationUpdated.emit(lid)
 
     def _finalize_create(self) -> None:
         _dbg("FINALIZE create clicked")
