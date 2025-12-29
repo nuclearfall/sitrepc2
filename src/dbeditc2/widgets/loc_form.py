@@ -112,6 +112,14 @@ class LocationForm(QWidget):
         form.addRow(self.finalize_btn)
 
         # --------------------------------------------------
+        # Set widget dimensions
+        # --------------------------------------------------
+        self.save_btn.setFixedWidth(140)
+        self.finalize_btn.setFixedWidth(140)
+        self.add_alias_btn.setFixedWidth(120)
+        self.remove_alias_btn.setFixedWidth(120)
+
+        # --------------------------------------------------
         # Signals
         # --------------------------------------------------
 
