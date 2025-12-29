@@ -26,7 +26,7 @@ class LocationWorkspace(QWidget):
         # ---- Wiring ----
 
         # Search → form
-        self.search_panel.locationSelected.connect(self.on_location_selection)
+        self.search_panel.locationSelected.connect(self._on_location_selection)
         self.search_panel.createRequested.connect(self.form.enter_create_mode)
 
         # Form → workspace
