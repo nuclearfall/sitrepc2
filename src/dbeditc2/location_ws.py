@@ -19,8 +19,8 @@ class LocationWorkspace(QWidget):
         self.form = LocationForm(self)
 
         layout = QHBoxLayout(self)
-        layout.addWidget(self.search_panel, 3)
-        layout.addWidget(self.form, 2)
+        layout.addWidget(self.search_panel, 1)
+        layout.addWidget(self.form, 0)
         self.setLayout(layout)
 
         # ---- Wiring ----

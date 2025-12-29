@@ -102,15 +102,14 @@ class LocationForm(QWidget):
         form.addRow("Wikidata", self.wikidata_edit)
 
         form.addRow("Aliases", self.alias_list)
-        form.addRow(self.alias_edit)
-        form.addRow(self.add_alias_btn)
-        form.addRow(self.remove_alias_btn)
+        form.addRow("", self.alias_edit)
+        form.addRow(self.add_alias_btn, self.remove_alias_btn)
 
         form.addRow("Group", self.group_combo)
         form.addRow("Region", self.region_combo)
 
-        form.addRow(self.save_btn)
-        form.addRow(self.finalize_btn)
+        form.addRow("", self.save_btn)
+        form.addRow("", self.finalize_btn)
 
         # --------------------------------------------------
         # Set widget dimensions
