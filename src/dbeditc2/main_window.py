@@ -27,7 +27,7 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.setWindowTitle("dbeditc2")
-        self.resize(600, 800)
+        self.resize(800, 600)
 
         # --------------------------------------------------
         # Workspace tabs
