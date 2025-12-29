@@ -80,6 +80,7 @@ class LocationSearchPanel(QWidget):
             lambda: self._run_search(self.search_edit.text())
         )
         self.results.itemClicked.connect(self._on_item_clicked)
+        self.results.setSelectionMode(QListWidget.ExtendedSelection)
 
         self._run_search("")
 
@@ -189,7 +190,12 @@ class LocationSearchPanel(QWidget):
                 )
 
     def _on_item_clicked(self, item: QListWidgetItem) -> None:
-        location_id = item.data(Qt.UserRole)
-        _dbg(f"itemClicked -> lid={location_id!r} type={type(location_id)}")
-        if location_id is not None:
-            self.locationSelected.emit(location_id)
+        items = self.results.selectedItems()
+        lids = [it.data(Qt.UserRole) for it in items if it.data(Qt.UserRole) is not None]
+
+        if lids:
+            # single → old behavior preserved
+            if len(lids) == 1:
+                self.locationSelected.emit(lids[0])
+            else:
+                self.locationSelected.emit(lids)

@@ -26,7 +26,7 @@ class LocationWorkspace(QWidget):
         # ---- Wiring ----
 
         # Search → form
-        self.search_panel.locationSelected.connect(self.form.load_location)
+        self.search_panel.locationSelected.connect(self.on_location_selection)
         self.search_panel.createRequested.connect(self.form.enter_create_mode)
 
         # Form → workspace
@@ -43,3 +43,11 @@ class LocationWorkspace(QWidget):
         """
         self.search_panel._run_search(self.search_panel.search_edit.text())
         self.form.load_location(location_id)
+
+    @Slot(object)
+    def _on_location_selection(self, location_id_or_ids: object) -> None:
+        if not self.form.isEnabled():
+            self.form.setEnabled(True)
+
+        self.form.load_location(location_id_or_ids)
+

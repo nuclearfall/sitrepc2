@@ -60,6 +60,8 @@ class LocationForm(QWidget):
 
         self._db_path = gazetteer_path()
         self._location_id: Optional[int] = None
+        self._location_ids: list[int] = []
+
         self._create_mode = False
 
         _dbg(f"INIT gazetteer_path() -> {self._db_path!r}")
@@ -125,7 +127,7 @@ class LocationForm(QWidget):
         self.remove_alias_btn.clicked.connect(self._remove_alias)
         self.save_btn.clicked.connect(self._save_existing)
         self.finalize_btn.clicked.connect(self._finalize_create)
-
+        
         self._load_groups()
         self._load_regions()
         self._set_view_mode()
@@ -163,12 +165,8 @@ class LocationForm(QWidget):
             for r in rows:
                 self.region_combo.addItem(r["name"], r["region_id"])
 
-    # --------------------------------------------------
-    # Public API
-    # --------------------------------------------------
-
     @Slot(object)
-    def load_location(self, location_id: object) -> None:
+    def _load_single(self, location_id: object) -> None:
         _dbg(f"LOAD location_id={location_id!r} type={type(location_id)}")
         self._location_id = location_id
         self._create_mode = False
@@ -228,6 +226,65 @@ class LocationForm(QWidget):
                 self.region_combo.findData(rid["region_id"]) if rid else 0
             )
 
+    def _load_multiple(self, location_ids: list[int]) -> None:
+        self._location_ids = location_ids
+        self._location_id = None   # important
+        self._create_mode = False
+        self.finalize_btn.hide()
+        self.save_btn.show()
+
+        with self._conn() as con:
+            rows = list(con.execute(
+                "SELECT location_id, name FROM locations WHERE location_id IN (%s)"
+                % ",".join("?" * len(location_ids)),
+                location_ids,
+            ))
+
+            names = {r["name"] for r in rows}
+            if len(names) != 1:
+                self._disable_alias_edit(
+                    "Multiple selection allowed only for identical location names"
+                )
+                return
+
+            # Disable non-alias fields
+            for w in (
+                self.lat_edit, self.lon_edit,
+                self.name_edit, self.place_edit,
+                self.wikidata_edit,
+                self.group_combo, self.region_combo,
+            ):
+                w.setEnabled(False)
+
+            self.id_label.setText(f"{len(location_ids)} locations")
+            self.name_edit.setText(next(iter(names)) or "")
+
+            # ---- Alias intersection ----
+            alias_sets = []
+            for lid in location_ids:
+                rows = con.execute(
+                    "SELECT normalized, alias FROM location_aliases WHERE location_id=?",
+                    (lid,),
+                ).fetchall()
+                alias_sets.append({r["normalized"]: r["alias"] for r in rows})
+
+            shared = set.intersection(*(set(a.keys()) for a in alias_sets)) if alias_sets else set()
+
+            self.alias_list.clear()
+            for norm in sorted(shared):
+                self.alias_list.addItem(alias_sets[0][norm])
+
+    # --------------------------------------------------
+    # Public API
+    # --------------------------------------------------
+
+    @Slot(object)
+    def load_location(self, location_id_or_ids: object) -> None:
+        if isinstance(location_id_or_ids, list):
+            self._load_multiple(location_id_or_ids)
+        else:
+            self._load_single(location_id_or_ids)
+
     def enter_create_mode(self) -> None:
         _dbg("ENTER create mode")
         self._location_id = None
@@ -256,11 +313,19 @@ class LocationForm(QWidget):
 
     def _add_alias(self) -> None:
         alias = self.alias_edit.text().strip()
-        _dbg(f"ADD alias clicked -> {alias!r}")
-        if alias:
-            self.alias_list.addItem(alias)
-            _dbg(f"alias_list count now {self.alias_list.count()}")
-            self.alias_edit.clear()
+        if not alias:
+            return
+
+        norm = alias.lower()
+
+        # prevent duplicates in shared view
+        for i in range(self.alias_list.count()):
+            if self.alias_list.item(i).text().lower() == norm:
+                return
+
+        self.alias_list.addItem(alias)
+        self.alias_edit.clear()
+
 
     def _remove_alias(self) -> None:
         selected = self.alias_list.selectedItems()
@@ -280,80 +345,138 @@ class LocationForm(QWidget):
         self.save_btn.show()
         self.finalize_btn.hide()
 
-    def _save_existing(self) -> None:
-        _dbg(f"SAVE existing clicked; _location_id={self._location_id!r}")
-        if not self._location_id:
-            _dbg("SAVE existing aborted: no _location_id")
-            return
+def _save_existing(self) -> None:
+    _dbg(
+        f"SAVE existing clicked; "
+        f"_location_id={self._location_id!r} "
+        f"_location_ids={self._location_ids!r}"
+    )
+
+    if not self._location_ids:
+        _dbg("SAVE aborted: no selected locations")
+        return
+
+    # ------------------------------------------------------------------
+    # MULTI-SELECTION: ALIASES ONLY
+    # ------------------------------------------------------------------
+    if len(self._location_ids) > 1:
+        _dbg("SAVE multi-selection -> alias-only mode")
 
         with self._conn() as con:
+            for lid in self._location_ids:
+                cur = con.execute(
+                    "DELETE FROM location_aliases WHERE location_id=?",
+                    (lid,),
+                )
+                _dbg(
+                    f"DELETE aliases location_id={lid} "
+                    f"rowcount={cur.rowcount}"
+                )
+
+                for i in range(self.alias_list.count()):
+                    alias = self.alias_list.item(i).text()
+                    cur = con.execute(
+                        """
+                        INSERT INTO location_aliases
+                        (location_id, alias, normalized)
+                        VALUES (?, ?, ?)
+                        """,
+                        (lid, alias, alias.lower()),
+                    )
+                    _dbg(
+                        f"INSERT alias {alias!r} "
+                        f"location_id={lid} "
+                        f"rowcount={cur.rowcount}"
+                    )
+
+        self.statusMessage.emit(
+            f"Aliases updated for {len(self._location_ids)} locations"
+        )
+        return
+
+    # ------------------------------------------------------------------
+    # SINGLE SELECTION: ORIGINAL FULL SAVE BEHAVIOR
+    # ------------------------------------------------------------------
+    lid = self._location_ids[0]
+    _dbg(f"SAVE single location -> full update location_id={lid}")
+
+    with self._conn() as con:
+        cur = con.execute(
+            """
+            UPDATE locations
+            SET name=?, place=?, wikidata=?
+            WHERE location_id=?
+            """,
+            (
+                self.name_edit.text() or None,
+                self.place_edit.text() or None,
+                self.wikidata_edit.text() or None,
+                lid,
+            ),
+        )
+        _dbg(
+            f"UPDATE locations rowcount={cur.rowcount} "
+            f"total_changes={con.total_changes}"
+        )
+
+        cur = con.execute(
+            "DELETE FROM location_aliases WHERE location_id=?",
+            (lid,),
+        )
+        _dbg(f"DELETE location_aliases rowcount={cur.rowcount}")
+
+        for i in range(self.alias_list.count()):
+            alias = self.alias_list.item(i).text()
             cur = con.execute(
                 """
-                UPDATE locations
-                SET name=?, place=?, wikidata=?
-                WHERE location_id=?
+                INSERT INTO location_aliases
+                (location_id, alias, normalized)
+                VALUES (?, ?, ?)
                 """,
-                (
-                    self.name_edit.text() or None,
-                    self.place_edit.text() or None,
-                    self.wikidata_edit.text() or None,
-                    self._location_id,
-                ),
+                (lid, alias, alias.lower()),
             )
-            _dbg(f"UPDATE locations rowcount={cur.rowcount} total_changes={con.total_changes}")
+            _dbg(f"INSERT alias {alias!r} rowcount={cur.rowcount}")
 
+        cur = con.execute(
+            "DELETE FROM location_groups WHERE location_id=?",
+            (lid,),
+        )
+        _dbg(f"DELETE location_groups rowcount={cur.rowcount}")
+
+        cur = con.execute(
+            "DELETE FROM location_regions WHERE location_id=?",
+            (lid,),
+        )
+        _dbg(f"DELETE location_regions rowcount={cur.rowcount}")
+
+        gid = self.group_combo.currentData()
+        rid = self.region_combo.currentData()
+        _dbg(f"current group={gid!r} region={rid!r}")
+
+        if gid is not None:
             cur = con.execute(
-                "DELETE FROM location_aliases WHERE location_id=?",
-                (self._location_id,),
+                "INSERT INTO location_groups VALUES (?, ?)",
+                (lid, gid),
             )
-            _dbg(f"DELETE location_aliases rowcount={cur.rowcount}")
+            _dbg(f"INSERT location_groups rowcount={cur.rowcount}")
 
-            for i in range(self.alias_list.count()):
-                a = self.alias_list.item(i).text()
-                cur = con.execute(
-                    """
-                    INSERT INTO location_aliases
-                    (location_id, alias, normalized)
-                    VALUES (?, ?, ?)
-                    """,
-                    (self._location_id, a, a.lower()),
-                )
-                _dbg(f"INSERT alias {a!r} rowcount={cur.rowcount}")
+        if rid is not None:
+            cur = con.execute(
+                "INSERT INTO location_regions VALUES (?, ?)",
+                (lid, rid),
+            )
+            _dbg(f"INSERT location_regions rowcount={cur.rowcount}")
 
-            cur = con.execute("DELETE FROM location_groups WHERE location_id=?", (self._location_id,))
-            _dbg(f"DELETE location_groups rowcount={cur.rowcount}")
-            cur = con.execute("DELETE FROM location_regions WHERE location_id=?", (self._location_id,))
-            _dbg(f"DELETE location_regions rowcount={cur.rowcount}")
+        exists = con.execute(
+            "SELECT COUNT(*) FROM locations WHERE location_id=?",
+            (lid,),
+        ).fetchone()[0]
+        _dbg(f"VERIFY locations exists after save -> {exists}")
 
-            gid = self.group_combo.currentData()
-            rid = self.region_combo.currentData()
-            _dbg(f"current group={gid!r} region={rid!r}")
+        _dbg(f"END SAVE total_changes={con.total_changes}")
 
-            if gid is not None:
-                cur = con.execute(
-                    "INSERT INTO location_groups VALUES (?, ?)",
-                    (self._location_id, gid),
-                )
-                _dbg(f"INSERT location_groups rowcount={cur.rowcount}")
-
-            if rid is not None:
-                cur = con.execute(
-                    "INSERT INTO location_regions VALUES (?, ?)",
-                    (self._location_id, rid),
-                )
-                _dbg(f"INSERT location_regions rowcount={cur.rowcount}")
-
-            # Verify row exists in this same connection
-            exists = con.execute(
-                "SELECT COUNT(*) FROM locations WHERE location_id=?",
-                (self._location_id,),
-            ).fetchone()[0]
-            _dbg(f"VERIFY locations exists after save -> {exists}")
-
-            _dbg(f"END SAVE total_changes={con.total_changes}")
-
-        self.statusMessage.emit("Location updated")
-        self.locationUpdated.emit(self._location_id)
+    self.statusMessage.emit("Location updated")
+    self.locationUpdated.emit(lid)
 
     def _finalize_create(self) -> None:
         _dbg("FINALIZE create clicked")
