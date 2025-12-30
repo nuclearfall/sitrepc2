@@ -9,7 +9,7 @@ from typing import Any, Iterable, Optional
 # ============================================================
 
 @dataclass(frozen=True, slots=True)
-class WordMatch:
+class PhraseMatch:
     """
     Thin wrapper around one entry from the 'word_matches' list in the
     dictionary returned by Holmes Manager.match().
@@ -38,7 +38,7 @@ class WordMatch:
     similarity_measure: float
     involves_coreference: bool
 
-    extracted_word: Optional[str]
+    extracted_phrase: Optional[str]
     depth: int
     explanation: Optional[str]
 
@@ -77,19 +77,19 @@ class EventMatch:
     # Holmes accessors (thin only)
     # -------------------------------
 
-    def iter_word_matches(self) -> Iterable[WordMatch]:
+    def iter_phrase_matches(self) -> Iterable[PhraseMatch]:
         """
-        Yield WordMatch wrappers for Holmes 'word_matches'.
+        Yield PhraseMatch wrappers for Holmes 'word_matches'.
         No filtering. No interpretation.
         """
-        for wm in self.raw_match.get("word_matches", []):
-            yield WordMatch(**wm)
+        for pm in self.raw_match.get("phrase_matches", []):
+            yield PhraseMatch(**pm)
 
-    def iter_content_words(self) -> Iterable[WordMatch]:
+    def iter_content_words(self) -> Iterable[PhraseMatch]:
         """
-        Yield content-bearing WordMatches only.
+        Yield content-bearing PhraseMatches only.
         This mirrors Holmes semantics and is still structural.
         """
-        for wm in self.iter_word_matches():
-            if wm.match_type:
-                yield wm
+        for pm in self.iter_phrase_matches():
+            if pm.match_type:
+                yield pm

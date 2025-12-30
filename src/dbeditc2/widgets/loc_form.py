@@ -79,8 +79,8 @@ class LocationForm(QWidget):
 
         self.alias_list = QListWidget()
         self.alias_edit = QLineEdit()
-        self.add_alias_btn = QPushButton("Add Alias")
-        self.remove_alias_btn = QPushButton("Remove Selected")
+        self.add_alias_btn = QPushButton("Add")
+        self.remove_alias_btn = QPushButton("Remove")
 
         self.group_combo = QComboBox()
         self.region_combo = QComboBox()
@@ -102,7 +102,7 @@ class LocationForm(QWidget):
         form.addRow("Wikidata", self.wikidata_edit)
 
         form.addRow("Aliases", self.alias_list)
-        form.addRow("", self.alias_edit)
+        form.addRow("New Alias", self.alias_edit)
         form.addRow(self.add_alias_btn, self.remove_alias_btn)
 
         form.addRow("Group", self.group_combo)

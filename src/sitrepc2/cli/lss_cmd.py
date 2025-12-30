@@ -294,6 +294,99 @@ def lss_summarize(
                     print(f"  {kind}: {', '.join(sorted(values))}")
 
 
+# ---------------------------------------------------------------------------
+# STATUS COMMAND (new)
+# ---------------------------------------------------------------------------
+
+@app.command("status")
+def lss_status(
+    *,
+    post_id: Optional[int] = typer.Option(None),
+    alias: Optional[str] = typer.Option(None),
+    publisher: Optional[str] = typer.Option(None),
+    pub_date: Optional[str] = typer.Option(None),
+    source: Optional[str] = typer.Option(None),
+    limit: Optional[int] = typer.Option(None),
+):
+    """
+    Show LSS extraction status for ingest posts:
+    FETCHED / PENDING / EXTRACTED
+    """
+
+    _validate_selectors(
+        post_id=post_id,
+        alias=alias,
+        publisher=publisher,
+        pub_date=pub_date,
+        source=source,
+    )
+
+    with _conn() as con:
+        posts = _select_ingest_posts(
+            con=con,
+            post_id=post_id,
+            alias=alias,
+            publisher=publisher,
+            pub_date=pub_date,
+            source=source,
+            limit=limit,
+        )
+
+        if not posts:
+            print("[yellow]No matching ingest posts found.[/yellow]")
+            raise typer.Exit()
+
+        table = Table(title="LSS Extraction Status", show_lines=True)
+        table.add_column("Post ID", style="cyan", width=8)
+        table.add_column("Published", style="dim")
+        table.add_column("Alias", style="green")
+        table.add_column("Publisher")
+        table.add_column("Status", style="bold")
+
+        for post in posts:
+            post_id_val = post["id"]
+
+            # Completed run?
+            completed = con.execute(
+                """
+                SELECT 1
+                FROM lss_runs
+                WHERE ingest_post_id = ?
+                  AND completed_at IS NOT NULL
+                LIMIT 1
+                """,
+                (post_id_val,),
+            ).fetchone()
+
+            if completed:
+                status = "[green]EXTRACTED[/green]"
+            else:
+                # Any in-progress run?
+                pending = con.execute(
+                    """
+                    SELECT 1
+                    FROM lss_runs
+                    WHERE ingest_post_id = ?
+                      AND completed_at IS NULL
+                    LIMIT 1
+                    """,
+                    (post_id_val,),
+                ).fetchone()
+
+                if pending:
+                    status = "[yellow]PENDING[/yellow]"
+                else:
+                    status = "[dim]FETCHED[/dim]"
+
+            table.add_row(
+                str(post_id_val),
+                post["published_at"],
+                post["alias"],
+                post["publisher"],
+                status,
+            )
+
+        print(table)
 
 # ---------------------------------------------------------------------------
 # Rendering helpers (events)

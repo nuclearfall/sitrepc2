@@ -37,7 +37,6 @@ class LocationSearchPanel(QWidget):
 
     MODE_LOCATIONS = "Locations (name / alias)"
     MODE_ALIASES = "Aliases"
-    MODE_OSM = "OSM ID"
     MODE_WIKIDATA = "Wikidata"
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
@@ -56,7 +55,6 @@ class LocationSearchPanel(QWidget):
         self.lookup_mode.addItems([
             self.MODE_LOCATIONS,
             self.MODE_ALIASES,
-            self.MODE_OSM,
             self.MODE_WIKIDATA,
         ])
 

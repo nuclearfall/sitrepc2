@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List
 
-from spacy.tokens import Doc
+from spacy.tokens import Doc, Span
 
-from sitrepc2.lss.typedefs import EventMatch, WordMatch
+from sitrepc2.lss.typedefs import EventMatch, PhraseMatch
 
 
 # ---------------------------------------------------------------------
@@ -16,7 +16,6 @@ from sitrepc2.lss.typedefs import EventMatch, WordMatch
 # - Locations are NEVER role candidates
 # - Locations exist only as LocationItems inside LocationSeries
 # - series_id and item_id are ORDINALS LOCAL TO A SINGLE EVENT
-#   (they are NOT database IDs; persistence must remap them)
 # - Context is attached at the LOWEST DEFENSIBLE STRUCTURAL LEVEL
 # ---------------------------------------------------------------------
 
@@ -26,11 +25,12 @@ class LSSRoleCandidate:
     text: str
     start_token: int
     end_token: int
+    match_type: str
     negated: bool
     uncertain: bool
     involves_coreference: bool
-    similarity: float | None
-    explanation: str | None = None
+    similarity: float
+    explanation: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,7 +56,7 @@ class LSSContextHint:
     start_token: int
     end_token: int
     scope: str                    # LOCATION / SERIES / EVENT / SECTION / POST
-    target_id: int | None         # item_id / series_id / event_ordinal / section_id / None
+    target_id: int | None         # item_id / series_id / event_id / section_id / None
     source: str                   # GAZETTEER
 
 
@@ -66,6 +66,11 @@ SERIES_JOIN_TOKENS = {",", "and", "or", "&"}
 # ---------------------------------------------------------------------
 # TOP-LEVEL API
 # ---------------------------------------------------------------------
+
+def spans_by_label(doc, label, group: str = None):
+    source = doc.ents if group is None else doc.spans.get(group, [])
+    return [span for span in source if span.label_ == label]
+
 
 def lss_scope_event(
     *,
@@ -80,27 +85,18 @@ def lss_scope_event(
 ]:
     """
     Perform STRUCTURAL scoping for a single Holmes event.
-
-    Returns three lists (never None):
-        - role_candidates
-        - location_series
-        - context_hints
     """
 
-    event_span = doc[event.doc_start_token_index : event.doc_end_token_index]
-    assert (any(e.label_ == "LOCATION" for e in doc.ents)), "Not any LOCATION entity exists"
-    assert any(
-        e.label_ == "LOCATION"
-        and e.start < event.doc_end_token_index
-        and e.end > event.doc_start_token_index
-        for e in doc.ents
-    ), "No LOCATION entity overlaps Holmes event span"
+    # -------------------------------------------------
+    # EVENT WINDOW (sentence-bounded)
+    # -------------------------------------------------
 
-
-
+    sent = doc[event.doc_start_token_index].sent
+    event_start = sent.start
+    event_end = sent.end
 
     # -------------------------------------------------
-    # ROLE CANDIDATES (HOLMES-DERIVED ONLY)
+    # ROLE CANDIDATES
     # -------------------------------------------------
 
     role_candidates: list[LSSRoleCandidate] = []
@@ -116,19 +112,25 @@ def lss_scope_event(
                 text=wm.document_phrase or wm.document_word,
                 start_token=wm.first_document_token_index,
                 end_token=wm.last_document_token_index + 1,
+                match_type=wm.match_type,
                 negated=wm.negated,
                 uncertain=wm.uncertain,
                 involves_coreference=wm.involves_coreference,
-                similarity=wm.similarity_measure,
+                similarity=wm.similarity,
                 explanation=wm.explanation,
             )
         )
 
     # -------------------------------------------------
-    # LOCATION → LOCATION SERIES + ITEMS
+    # LOCATION SERIES (EVENT-LOCAL)
     # -------------------------------------------------
 
-    loc_ents = [e for e in doc.ents if e.label_ == "LOCATION"]
+    loc_ents = [
+        e for e in doc.ents
+        if e.label_ == "LOCATION"
+        and _spans_overlap(e.start, e.end, event_start, event_end)
+    ]
+
     loc_ents.sort(key=lambda e: e.start)
 
     location_series: list[LSSLocationSeries] = []
@@ -176,7 +178,7 @@ def lss_scope_event(
         )
 
     # -------------------------------------------------
-    # CONTEXT HINTS (FULL STRUCTURAL LATTICE)
+    # CONTEXT HINTS
     # -------------------------------------------------
 
     context_hints: list[LSSContextHint] = []
@@ -187,9 +189,10 @@ def lss_scope_event(
 
         attached = False
 
-        # LOCATION-LEVEL:
-        # Only when context is fully CONTAINED within a single location span
-        # (e.g., parenthetical: "Kupiansk (Kharkov Region)")
+        # ---------------------------------------------
+        # LOCATION (contained-in-item)
+        # ---------------------------------------------
+
         for series in location_series:
             for item in series.items:
                 if ent.start >= item.start_token and ent.end <= item.end_token:
@@ -209,8 +212,23 @@ def lss_scope_event(
         if attached:
             continue
 
-        # SERIES-LEVEL:
-        # Context overlaps series span but is NOT contained within a single item
+        # ---------------------------------------------
+        # LOCATION (retroactive series qualifier)
+        # ---------------------------------------------
+
+        attached = _apply_retroactive_series_qualifier(
+            doc=doc,
+            location_series=location_series,
+            ctx_ent=ent,
+            context_hints=context_hints,
+        )
+        if attached:
+            continue
+
+        # ---------------------------------------------
+        # SERIES
+        # ---------------------------------------------
+
         for series in location_series:
             if _spans_overlap(ent.start, ent.end, series.start_token, series.end_token):
                 context_hints.append(
@@ -229,8 +247,11 @@ def lss_scope_event(
         if attached:
             continue
 
-        # EVENT-LEVEL:
-        if _spans_overlap(ent.start, ent.end, event_span.start, event_span.end):
+        # ---------------------------------------------
+        # EVENT
+        # ---------------------------------------------
+
+        if _spans_overlap(ent.start, ent.end, event_start, event_end):
             context_hints.append(
                 LSSContextHint(
                     ctx_kind=ent.label_,
@@ -244,7 +265,10 @@ def lss_scope_event(
             )
             continue
 
-        # SECTION-LEVEL:
+        # ---------------------------------------------
+        # SECTION / POST
+        # ---------------------------------------------
+
         if section_id is not None:
             context_hints.append(
                 LSSContextHint(
@@ -257,20 +281,18 @@ def lss_scope_event(
                     source="GAZETTEER",
                 )
             )
-            continue
-
-        # POST-LEVEL (fallback)
-        context_hints.append(
-            LSSContextHint(
-                ctx_kind=ent.label_,
-                text=ent.text,
-                start_token=ent.start,
-                end_token=ent.end,
-                scope="POST",
-                target_id=None,
-                source="GAZETTEER",
+        else:
+            context_hints.append(
+                LSSContextHint(
+                    ctx_kind=ent.label_,
+                    text=ent.text,
+                    start_token=ent.start,
+                    end_token=ent.end,
+                    scope="POST",
+                    target_id=None,
+                    source="GAZETTEER",
+                )
             )
-        )
 
     return role_candidates, location_series, context_hints
 
@@ -283,7 +305,7 @@ def _spans_overlap(a1: int, a2: int, b1: int, b2: int) -> bool:
     return not (a2 <= b1 or b2 <= a1)
 
 
-def _infer_role_kind_from_pattern_element(wm: WordMatch) -> str | None:
+def _infer_role_kind_from_pattern_element(wm: PhraseMatch) -> str | None:
     mt = (wm.match_type or "").lower()
 
     if mt in {"subject", "actor", "object", "dobj", "possessor"}:
@@ -293,3 +315,75 @@ def _infer_role_kind_from_pattern_element(wm: WordMatch) -> str | None:
         return "ACTION"
 
     return None
+
+
+def _apply_retroactive_series_qualifier(
+    *,
+    doc: Doc,
+    location_series: list[LSSLocationSeries],
+    ctx_ent: Span,
+    context_hints: list[LSSContextHint],
+) -> bool:
+    """
+    Retroactive REGION/GROUP/DIRECTION qualifiers partition a location series.
+    Each applies only to items since the previous qualifier of the same kind.
+    """
+
+    kind = ctx_ent.label_
+    ctx_start = ctx_ent.start
+    ctx_end = ctx_ent.end
+
+    for series in location_series:
+        items = series.items
+        if not items:
+            continue
+
+        # Must occur after at least one item
+        last_item_before = None
+        for it in items:
+            if it.end_token <= ctx_start:
+                last_item_before = it
+            else:
+                break
+
+        if last_item_before is None:
+            continue
+
+        # Block if another LOCATION intervenes outside the series
+        series_starts = {it.start_token for it in items}
+        for ent in doc.ents:
+            if ent.label_ != "LOCATION":
+                continue
+            if last_item_before.end_token <= ent.start < ctx_start:
+                if ent.start not in series_starts:
+                    return False
+
+        # Find cutoff from prior same-kind qualifiers
+        cutoff = series.start_token
+        for ch in context_hints:
+            if (
+                ch.ctx_kind == kind
+                and ch.scope == "LOCATION"
+                and ch.start_token < ctx_start
+                and any(it.item_id == ch.target_id for it in items)
+            ):
+                cutoff = max(cutoff, ch.start_token)
+
+        # Apply to items since cutoff
+        for it in items:
+            if it.start_token >= cutoff and it.end_token <= ctx_start:
+                context_hints.append(
+                    LSSContextHint(
+                        ctx_kind=kind,
+                        text=ctx_ent.text,
+                        start_token=ctx_start,
+                        end_token=ctx_end,
+                        scope="LOCATION",
+                        target_id=it.item_id,
+                        source="GAZETTEER",
+                    )
+                )
+
+        return True
+
+    return False
