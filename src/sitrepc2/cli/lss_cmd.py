@@ -294,10 +294,6 @@ def lss_summarize(
                     print(f"  {kind}: {', '.join(sorted(values))}")
 
 
-# ---------------------------------------------------------------------------
-# STATUS COMMAND (new)
-# ---------------------------------------------------------------------------
-
 @app.command("status")
 def lss_status(
     *,
@@ -311,17 +307,12 @@ def lss_status(
     """
     Show LSS extraction status for ingest posts:
     FETCHED / PENDING / EXTRACTED
+
+    With no filters, shows ALL ingest posts.
     """
 
-    _validate_selectors(
-        post_id=post_id,
-        alias=alias,
-        publisher=publisher,
-        pub_date=pub_date,
-        source=source,
-    )
-
     with _conn() as con:
+        # NOTE: unlike other commands, status allows NO selectors
         posts = _select_ingest_posts(
             con=con,
             post_id=post_id,
@@ -333,7 +324,7 @@ def lss_status(
         )
 
         if not posts:
-            print("[yellow]No matching ingest posts found.[/yellow]")
+            print("[yellow]No ingest posts found.[/yellow]")
             raise typer.Exit()
 
         table = Table(title="LSS Extraction Status", show_lines=True)
@@ -341,12 +332,12 @@ def lss_status(
         table.add_column("Published", style="dim")
         table.add_column("Alias", style="green")
         table.add_column("Publisher")
+        table.add_column("Source")
         table.add_column("Status", style="bold")
 
         for post in posts:
-            post_id_val = post["id"]
+            pid = post["id"]
 
-            # Completed run?
             completed = con.execute(
                 """
                 SELECT 1
@@ -355,13 +346,12 @@ def lss_status(
                   AND completed_at IS NOT NULL
                 LIMIT 1
                 """,
-                (post_id_val,),
+                (pid,),
             ).fetchone()
 
             if completed:
                 status = "[green]EXTRACTED[/green]"
             else:
-                # Any in-progress run?
                 pending = con.execute(
                     """
                     SELECT 1
@@ -370,7 +360,7 @@ def lss_status(
                       AND completed_at IS NULL
                     LIMIT 1
                     """,
-                    (post_id_val,),
+                    (pid,),
                 ).fetchone()
 
                 if pending:
@@ -379,10 +369,11 @@ def lss_status(
                     status = "[dim]FETCHED[/dim]"
 
             table.add_row(
-                str(post_id_val),
+                str(pid),
                 post["published_at"],
                 post["alias"],
                 post["publisher"],
+                post["source"],
                 status,
             )
 
