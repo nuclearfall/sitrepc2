@@ -93,12 +93,16 @@ def _select_ingest_posts(
 
     where_sql = " AND ".join(clauses)
 
-    sql = f"""
+    sql = """
         SELECT id, published_at, alias, publisher, source
         FROM ingest_posts
-        WHERE {where_sql}
-        ORDER BY published_at ASC
     """
+
+    if where_sql:
+        sql += f" WHERE {where_sql}"
+
+    sql += " ORDER BY published_at ASC"
+
 
     if limit is not None:
         sql += " LIMIT ?"
