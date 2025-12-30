@@ -53,6 +53,16 @@ def compute_doc_span_from_phrase_match(raw: dict) -> Tuple[int, int]:
     return min(starts), max(ends)
 
 
+def _sentence_span(doc: Doc, start: int, end: int) -> tuple[int, int]:
+    """
+    Return document token span of the sentence containing [start, end).
+    """
+    for sent in doc.sents:
+        if sent.start <= start < sent.end:
+            return sent.start, sent.end
+    return start, end
+
+
 def build_lss_events(
     *,
     doc: Doc,
@@ -72,30 +82,17 @@ def build_lss_events(
     """
     Build STRUCTURALLY VALID LSS events from Holmes EVENT PHRASE matches.
 
-    EVENT VALIDITY RULES (CANONICAL):
+    EVENT VALIDITY RULES (UPDATED, CANONICAL):
         - MUST have ≥ 1 role candidate (ACTOR / ACTION)
-        - MUST have ≥ 1 location series
+        - MUST have ≥ 1 location series overlapping
+            EITHER:
+              - event span
+              - OR containing sentence span
         - context hints may be empty
-
-    Optional behavior:
-        - If collect_nonspatial=True, Holmes event matches that fail
-          the LOCATION requirement are returned separately for audit/debug.
-        - Non-spatial matches are NEVER promoted to LSS events.
-
-    Returns:
-        (valid_lss_events, rejected_nonspatial_events)
     """
 
-    valid_events: list[
-        Tuple[
-            EventMatch,
-            List[LSSRoleCandidate],
-            List[LSSLocationSeries],
-            List[LSSContextHint],
-        ]
-    ] = []
-
-    rejected_nonspatial: list[EventMatch] = []
+    valid_events = []
+    rejected_nonspatial = []
 
     for ordinal, event in enumerate(event_matches):
         role_candidates, location_series, context_hints = lss_scope_event(
@@ -104,14 +101,31 @@ def build_lss_events(
             event_ordinal=ordinal,
         )
 
-        # -------------------------------------------------
-        # STRUCTURAL EVENT VALIDATION (LSS CANONICAL)
-        # -------------------------------------------------
-
         if not role_candidates:
             continue
 
         if not location_series:
+            if collect_nonspatial:
+                rejected_nonspatial.append(event)
+            continue
+
+        # -------------------------------------------------
+        # SENTENCE-LEVEL SPATIAL VALIDATION (FIX)
+        # -------------------------------------------------
+
+        sent_start, sent_end = _sentence_span(
+            doc,
+            event.doc_start_token_index,
+            event.doc_end_token_index,
+        )
+
+        def overlaps_sentence(series: LSSLocationSeries) -> bool:
+            return not (
+                series.end_token <= sent_start
+                or series.start_token >= sent_end
+            )
+
+        if not any(overlaps_sentence(s) for s in location_series):
             if collect_nonspatial:
                 rejected_nonspatial.append(event)
             continue
