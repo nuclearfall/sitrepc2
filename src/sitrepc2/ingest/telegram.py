@@ -31,12 +31,7 @@ _DB_FILE = records_path()
 # Bootstrap data
 # ---------------------------------------------------------------------------
 
-BOOTSTRAP_SOURCES = [
-    {"source_name": "mod_russia_en", "alias": "Russia", "source_lang": "en", "active": True, "source_kind": "TELEGRAM"},
-    {"source_name": "GeneralStaffZSU", "alias": "Ukraine", "source_lang": "uk", "active": True, "source_kind": "TELEGRAM"},
-    {"source_name": "deepstatemap", "alias": "DeepState", "source_lang": "uk", "active": False, "source_kind": "TELEGRAM"},
-    {"source_name": "rybar_in_english", "alias": "Rybar", "source_lang": "ru", "active": False, "source_kind": "TELEGRAM"},
-]
+BOOTSTRAP_SOURCES = []
 
 # ---------------------------------------------------------------------------
 # Data model
