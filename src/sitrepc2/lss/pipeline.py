@@ -148,7 +148,7 @@ def run_lss_pipeline(
                     EventMatch(
                         event_id=f"{ingest_post_id}:{ordinal}",
                         post_id=str(ingest_post_id),
-                        label=raw.get("label", ""),
+                        label=raw.get("search_phrase_label", ""),
                         search_phrase_text=raw.get("search_phrase_text", ""),
                         sentences_within_document=text,
                         overall_similarity=similarity,
