@@ -49,14 +49,14 @@ def register_search_phrases(manager: holmes.Manager) -> None:
                 label=row["label"],
             )
 
-        # -------------------------------------------------
-        # Context phrases
-        # -------------------------------------------------
-        cur.execute(
-            "SELECT label, phrase FROM context_phrases ORDER BY label"
-        )
-        for row in cur.fetchall():
-            reg(
-                row["phrase"],
-                label=row["label"],
-            )
+        # # -------------------------------------------------
+        # # Context phrases
+        # # -------------------------------------------------
+        # cur.execute(
+        #     "SELECT label, phrase FROM context_phrases ORDER BY label"
+        # )
+        # for row in cur.fetchall():
+        #     reg(
+        #         row["phrase"],
+        #         label=row["label"],
+        #     )
