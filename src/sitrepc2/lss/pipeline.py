@@ -157,7 +157,7 @@ def run_lss_pipeline(
                         involves_coreference=bool(raw.get("involves_coreference", False)),
                         doc_start_token_index=start,
                         doc_end_token_index=end,
-                        raw_match=raw,  # provenance only
+                        raw_match=raw,
                     )
                 )
 
@@ -171,19 +171,13 @@ def run_lss_pipeline(
                 collect_nonspatial=keep_nonspatial,
             )
 
-            # If the post produces no valid events → skip entirely
-            if not lss_events:
-                complete_lss_run(lss_run_id)
-                continue
-
             # -------------------------
-            # Sections (persist ONLY if used)
+            # Sections (persist regardless of events)
             # -------------------------
 
             sections = split_into_sections(post["text"])
             section_id_by_ordinal: dict[int, int] = {}
 
-            # Current invariant: all events in section 0
             used_section_ordinals = {0}
 
             for sec in sections:
@@ -197,8 +191,13 @@ def run_lss_pipeline(
                     ordinal=sec.ordinal,
                 )
 
+            # If no valid events, complete run but DO NOT skip persistence entirely
+            if not lss_events:
+                complete_lss_run(lss_run_id)
+                continue
+
             # -------------------------
-            # Contextualization (MANDATORY)
+            # Contextualization
             # -------------------------
 
             section_ordinals = sorted(section_id_by_ordinal.keys())
@@ -220,6 +219,8 @@ def run_lss_pipeline(
             # Persistence
             # -------------------------
 
+            event_id_map: dict[int, int] = {}
+
             for ordinal, (event, roles, series_list, hints) in enumerate(lss_events):
                 section_id = section_id_by_ordinal.get(0)
 
@@ -239,6 +240,8 @@ def run_lss_pipeline(
                     uncertain=event.uncertain,
                     involves_coreference=event.involves_coreference,
                 )
+
+                event_id_map[ordinal] = lss_event_id
 
                 for rc in roles:
                     persist_role_candidate(lss_event_id=lss_event_id, rc=rc)
@@ -260,6 +263,8 @@ def run_lss_pipeline(
                         hint=hint,
                         series_id_map=series_id_map,
                         item_id_map=item_id_map,
+                        event_id_map=event_id_map,
+                        section_id_map=section_id_by_ordinal,
                     )
 
             complete_lss_run(lss_run_id)
