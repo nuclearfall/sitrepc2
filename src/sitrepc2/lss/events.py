@@ -13,19 +13,21 @@ from sitrepc2.lss.lss_scoping import (
 )
 
 
+# ---------------------------------------------------------------------
+# DEBUG HELPERS
+# ---------------------------------------------------------------------
+
+def _dbg(msg: str) -> None:
+    print(f"[LSS][events] {msg}", flush=True)
+
+
+# ---------------------------------------------------------------------
+# HOLMES SPAN HELPER
+# ---------------------------------------------------------------------
+
 def compute_doc_span_from_phrase_match(raw: dict) -> Tuple[int, int]:
     """
     Compute the document-level token span for a Holmes PHRASE match.
-
-    Notes:
-    - Holmes internally exposes token alignment via the key `word_matches`
-      (historical naming; these are NOT simple word hits).
-    - This function treats them as structural token anchors only.
-
-    Structural helper only:
-    - no interpretation
-    - no token objects
-    - no semantic filtering
     """
 
     token_alignments = raw.get("word_matches")
@@ -51,6 +53,10 @@ def compute_doc_span_from_phrase_match(raw: dict) -> Tuple[int, int]:
     return min(starts), max(ends)
 
 
+# ---------------------------------------------------------------------
+# EVENT BUILDER (INSTRUMENTED)
+# ---------------------------------------------------------------------
+
 def build_lss_events(
     *,
     doc: Doc,
@@ -69,32 +75,62 @@ def build_lss_events(
 ]:
     """
     Build STRUCTURALLY VALID LSS events from Holmes EVENT PHRASE matches.
-
-    EVENT VALIDITY RULES (UPDATED):
-        - MUST have ≥ 1 role candidate (ACTOR / ACTION)
-        - NO spatial / overlap / sentence constraints
-        - location series may be empty
-        - context hints may be empty
     """
 
-    valid_events: list = []
-    rejected_nonspatial: list = []
+    event_matches = list(event_matches)
+    _dbg(f"Received {len(event_matches)} EventMatch objects")
+
+    valid_events = []
+    rejected = []
 
     for ordinal, event in enumerate(event_matches):
+        _dbg(
+            f"EVENT[{ordinal}] "
+            f"label={event.label!r} "
+            f"similarity={event.overall_similarity:.3f} "
+            f"tokens=({event.doc_start_token_index}, {event.doc_end_token_index})"
+        )
+
+        sent = doc[event.doc_start_token_index].sent
+        _dbg(f"  sentence: {sent.text.strip()}")
+
         role_candidates, location_series, context_hints = lss_scope_event(
             doc=doc,
             event=event,
             event_ordinal=ordinal,
         )
 
-        # -------------------------------------------------
-        # MINIMUM STRUCTURAL REQUIREMENT
-        # -------------------------------------------------
+        _dbg(f"  roles={len(role_candidates)}")
+        for rc in role_candidates:
+            _dbg(
+                f"    ROLE {rc.role_kind} "
+                f"[{rc.start_token},{rc.end_token}): {rc.text!r}"
+            )
+
+        _dbg(f"  location_series={len(location_series)}")
+        for s in location_series:
+            items = ", ".join(it.text for it in s.items)
+            _dbg(
+                f"    SERIES[{s.series_id}] "
+                f"[{s.start_token},{s.end_token}): {items}"
+            )
+
+        _dbg(f"  context_hints={len(context_hints)}")
+        for ch in context_hints:
+            _dbg(
+                f"    CTX {ch.ctx_kind} "
+                f"scope={ch.scope} "
+                f"target={ch.target_id} "
+                f"text={ch.text!r}"
+            )
+
         if not role_candidates:
+            _dbg("  -> REJECTED (no role candidates)")
             if collect_nonspatial:
-                rejected_nonspatial.append(event)
+                rejected.append(event)
             continue
 
+        _dbg("  -> ACCEPTED")
         valid_events.append(
             (
                 event,
@@ -104,4 +140,5 @@ def build_lss_events(
             )
         )
 
-    return valid_events, rejected_nonspatial
+    _dbg(f"Returning {len(valid_events)} valid events")
+    return valid_events, rejected
