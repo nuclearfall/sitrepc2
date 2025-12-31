@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 from spacy.tokens import Doc, Span
 
@@ -51,13 +51,66 @@ class LSSLocationSeries:
 
 @dataclass(frozen=True, slots=True)
 class LSSContextHint:
-    ctx_kind: str                 # REGION / GROUP / DIRECTION
+    ctx_kind: str                 # REGION / GROUP / DIRECTION / etc
     text: str
-    start_token: int
-    end_token: int
+    start_token: Optional[int]
+    end_token: Optional[int]
     scope: str                    # LOCATION / SERIES / EVENT / SECTION / POST
-    target_id: int | None         # item_id / series_id / event_id / section_id / None
-    source: str                   # GAZETTEER
+    target_id: Optional[int]      # item_id / series_id / event_id / section_id / None
+    source: str                   # GAZETTEER | HOLMES | SYNTHETIC
+
+    # -----------------------------------------------------------------
+    # ADDITIVE API (SAFE)
+    # -----------------------------------------------------------------
+
+    @classmethod
+    def from_holmes_match(
+        cls,
+        *,
+        raw: dict,
+        doc: Doc,
+    ) -> "LSSContextHint":
+        """
+        Construct a CONTEXT hint directly from a Holmes CONTEXT:* match.
+
+        This method is ADDITIVE:
+        - No existing callers are affected
+        - Used only by the pipeline
+        - Scope defaults to POST; contextualize() will refine
+        """
+
+        label = raw.get("search_phrase_label", "")
+        assert label.startswith("CONTEXT:"), label
+
+        token_alignments = raw.get("word_matches") or []
+        starts: list[int] = []
+        ends: list[int] = []
+
+        for tm in token_alignments:
+            start = tm.get("document_token_index")
+            length = tm.get("document_token_length", 1)
+            if start is not None:
+                starts.append(start)
+                ends.append(start + length)
+
+        if starts:
+            start_token = min(starts)
+            end_token = max(ends)
+            text = doc[start_token:end_token].text
+        else:
+            start_token = None
+            end_token = None
+            text = raw.get("search_phrase_text", "") or ""
+
+        return cls(
+            ctx_kind=label[len("CONTEXT:"):],
+            text=text,
+            start_token=start_token,
+            end_token=end_token,
+            scope="POST",
+            target_id=None,
+            source="HOLMES",
+        )
 
 
 SERIES_JOIN_TOKENS = {",", "and", "or", "&"}
@@ -178,7 +231,7 @@ def lss_scope_event(
         )
 
     # -------------------------------------------------
-    # CONTEXT HINTS
+    # CONTEXT HINTS (GAZETTEER-BASED)
     # -------------------------------------------------
 
     context_hints: list[LSSContextHint] = []
@@ -338,7 +391,6 @@ def _apply_retroactive_series_qualifier(
         if not items:
             continue
 
-        # Must occur after at least one item
         last_item_before = None
         for it in items:
             if it.end_token <= ctx_start:
@@ -349,7 +401,6 @@ def _apply_retroactive_series_qualifier(
         if last_item_before is None:
             continue
 
-        # Block if another LOCATION intervenes outside the series
         series_starts = {it.start_token for it in items}
         for ent in doc.ents:
             if ent.label_ != "LOCATION":
@@ -358,18 +409,17 @@ def _apply_retroactive_series_qualifier(
                 if ent.start not in series_starts:
                     return False
 
-        # Find cutoff from prior same-kind qualifiers
         cutoff = series.start_token
         for ch in context_hints:
             if (
                 ch.ctx_kind == kind
                 and ch.scope == "LOCATION"
+                and ch.start_token is not None
                 and ch.start_token < ctx_start
                 and any(it.item_id == ch.target_id for it in items)
             ):
                 cutoff = max(cutoff, ch.start_token)
 
-        # Apply to items since cutoff
         for it in items:
             if it.start_token >= cutoff and it.end_token <= ctx_start:
                 context_hints.append(

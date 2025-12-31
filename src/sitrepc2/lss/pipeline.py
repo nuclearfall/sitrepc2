@@ -29,6 +29,7 @@ from sitrepc2.lss.persist import (
 )
 from sitrepc2.lss.typedefs import EventMatch
 from sitrepc2.lss.contextualize import contextualize
+from sitrepc2.lss.lss_scoping import LSSContextHint
 
 
 # ---------------------------------------------------------------------
@@ -130,39 +131,54 @@ def run_lss_pipeline(
                 model=nlp.meta.get("name"),
             )
 
-            # -------------------------
-            # Build EventMatch objects
-            # -------------------------
-
             event_matches: list[EventMatch] = []
+            context_hints: list[LSSContextHint] = []
 
-            for ordinal, raw in enumerate(matches_by_post.get(ingest_post_id, [])):
-                similarity = float(raw.get("overall_similarity_measure", 1.0))
-                if similarity < min_similarity:
-                    continue
-
-                start, end = compute_doc_span_from_phrase_match(raw)
-                text = raw.get("sentences_within_document") or doc[start:end].text
-
-                event_matches.append(
-                    EventMatch(
-                        event_id=f"{ingest_post_id}:{ordinal}",
-                        post_id=str(ingest_post_id),
-                        label=raw.get("search_phrase_label", ""),
-                        search_phrase_text=raw.get("search_phrase_text", ""),
-                        sentences_within_document=text,
-                        overall_similarity=similarity,
-                        negated=bool(raw.get("negated", False)),
-                        uncertain=bool(raw.get("uncertain", False)),
-                        involves_coreference=bool(raw.get("involves_coreference", False)),
-                        doc_start_token_index=start,
-                        doc_end_token_index=end,
-                        raw_match=raw,
-                    )
-                )
+            event_ordinal = 0
 
             # -------------------------
-            # Structural scoping + validation
+            # DISAMBIGUATION POINT
+            # -------------------------
+
+            for raw in matches_by_post.get(ingest_post_id, []):
+                label = raw.get("search_phrase_label", "")
+
+                if label.startswith("EVENT:"):
+                    similarity = float(raw.get("overall_similarity_measure", 1.0))
+                    if similarity < min_similarity:
+                        continue
+
+                    start, end = compute_doc_span_from_phrase_match(raw)
+                    text = raw.get("sentences_within_document") or doc[start:end].text
+
+                    event_matches.append(
+                        EventMatch(
+                            event_id=f"{ingest_post_id}:{event_ordinal}",
+                            post_id=str(ingest_post_id),
+                            label=label,
+                            search_phrase_text=raw.get("search_phrase_text", ""),
+                            sentences_within_document=text,
+                            overall_similarity=similarity,
+                            negated=bool(raw.get("negated", False)),
+                            uncertain=bool(raw.get("uncertain", False)),
+                            involves_coreference=bool(raw.get("involves_coreference", False)),
+                            doc_start_token_index=start,
+                            doc_end_token_index=end,
+                            raw_match=raw,
+                        )
+                    )
+                    event_ordinal += 1
+
+                elif label.startswith("CONTEXT:"):
+                    context_hints.append(
+                        LSSContextHint.from_holmes_match(
+                            raw=raw,
+                            doc=doc,
+                        )
+                    )
+
+            # -------------------------
+            # Structural scoping
             # -------------------------
 
             lss_events, rejected_nonspatial = build_lss_events(
@@ -172,44 +188,39 @@ def run_lss_pipeline(
             )
 
             # -------------------------
-            # Sections (persist regardless of events)
+            # Sections
             # -------------------------
 
             sections = split_into_sections(post["text"])
             section_id_by_ordinal: dict[int, int] = {}
 
-            used_section_ordinals = {0}
-
             for sec in sections:
-                if sec.ordinal not in used_section_ordinals:
-                    continue
+                if sec.ordinal == 0:
+                    section_id_by_ordinal[0] = persist_section(
+                        lss_run_id=lss_run_id,
+                        ingest_post_id=ingest_post_id,
+                        text=sec.text,
+                        ordinal=sec.ordinal,
+                    )
 
-                section_id_by_ordinal[sec.ordinal] = persist_section(
-                    lss_run_id=lss_run_id,
-                    ingest_post_id=ingest_post_id,
-                    text=sec.text,
-                    ordinal=sec.ordinal,
-                )
-
-            # If no valid events, complete run but DO NOT skip persistence entirely
             if not lss_events:
                 complete_lss_run(lss_run_id)
                 continue
 
             # -------------------------
-            # Contextualization
+            # Context lattice
             # -------------------------
 
             section_ordinals = sorted(section_id_by_ordinal.keys())
             event_ordinals_by_section = {0: list(range(len(lss_events)))}
 
-            for idx, (event, roles, series_list, hints) in enumerate(lss_events):
+            for idx, (event, roles, series_list, _) in enumerate(lss_events):
                 lss_events[idx] = (
                     event,
                     roles,
                     series_list,
                     contextualize(
-                        context_hints=hints,
+                        context_hints=context_hints,
                         section_ordinals=section_ordinals,
                         event_ordinals_by_section=event_ordinals_by_section,
                     ),
