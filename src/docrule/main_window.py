@@ -70,7 +70,7 @@ class MainWindow(QMainWindow):
 
         # Entity label -> color (used by viewer)
         self.ruler_colors: Dict[str, str] = {}
-
+        
         self._build_ui()
 
     # ------------------------------------------------------------------
@@ -280,7 +280,7 @@ class MainWindow(QMainWindow):
             self.attr_panel.set_token(token)
 
     def _on_viewer_text_selected(self, text: str) -> None:
-        self._pending_alias_text = text or None
+        # self.alias_panel._pending_alias_text = text or None
         self.alias_panel.set_pending_alias(self._pending_alias_text)
 
     def _on_gazetteer_selection_changed(self, rows) -> None:

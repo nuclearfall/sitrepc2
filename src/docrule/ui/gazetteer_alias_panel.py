@@ -85,7 +85,7 @@ class GazetteerAliasPanel(QWidget):
         self._original_aliases: Set[str] = set()
         self._current_aliases: Set[str] = set()
         self._alias_editor_visible: bool = False
-
+        self._pending_alias_text: str = ""
         # ---------------------------
         # Build UI
         # ---------------------------
