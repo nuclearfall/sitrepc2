@@ -62,7 +62,7 @@ dependencies = [
 [project.scripts]
 sitrepc2 = "sitrepc2.cli.app:app"
 sitrepc2-gui = "sitrepc2.gui.main:main"
-spanview = "docrule:app:main"
+docrule = "docrule.app:main"
 gazdbedit = "dbeditc2.app:main"
 
 # ----------------------------------------------------------------------
@@ -75,7 +75,7 @@ allow-direct-references = true
 [tool.hatch.build.targets.wheel]
 packages = [
     "src/sitrepc2",
-    "src/docruleredit",
+    "src/docrule",
     "src/dbeditc2",
 ]
 
