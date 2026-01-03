@@ -49,10 +49,9 @@ dependencies = [
     "torch>=2.0,<2.3",
 
     # --- GUI (PySide6) ---
-    "pyside6",
-    "PySide6>=6.6",
-    "PySide6-WebEngine>=6.6",
-    "osmium>=3.5"
+    "PySide6==6.6.*",
+    "PySide6-WebEngine==6.6.*",
+    "osmium>=3.5",
 ]
 
 # ----------------------------------------------------------------------
