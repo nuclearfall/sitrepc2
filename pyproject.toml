@@ -49,7 +49,7 @@ dependencies = [
     "torch>=2.0,<2.3",
 
     # --- GUI (PySide6) ---
-    "pyside6"
+    "pyside6",
     "osmium>=3.5",
 ]
 
