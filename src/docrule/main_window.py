@@ -99,7 +99,7 @@ class MainWindow(QMainWindow):
             self._on_aliases_committed
         )
 
-        self.viewer.selectedTextChanged.connect(self._on_viewer_text_selected)
+        self.viewer.selectionChanged.connect(self._on_viewer_text_selected)
         self.alias_panel.addAliasRequested.connect(self._on_add_alias_requested)
         self.alias_panel.selectionChanged.connect(self._on_gazetteer_selection_changed)
 
