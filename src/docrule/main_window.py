@@ -269,14 +269,14 @@ class MainWindow(QMainWindow):
                 not self.GAZETTEER_ONLY_HIGHLIGHTING
                 or label in self.GAZETTEER_LABELS
             ):
-                self.toolbar.set_current_label(label)
+                self.toolbar.set_current_ruler(label)
                 self.toolbar.set_current_color(self.ruler_colors.get(label))
             else:
-                self.toolbar.set_current_label(None)
+                self.toolbar.set_current_ruler(None)
 
             self.attr_panel.set_span(span)
         else:
-            self.toolbar.set_current_label(None)
+            self.toolbar.set_current_ruler(None)
             self.attr_panel.set_token(token)
 
     def _on_viewer_text_selected(self, text: str) -> None:
