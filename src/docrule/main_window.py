@@ -67,6 +67,7 @@ class MainWindow(QMainWindow):
             spacy_model=spacy_model,
             enable_coreferee=enable_coreferee,
         )
+        self._pending_alias_text = ""
 
         # Entity label -> color (used by viewer)
         self.ruler_colors: Dict[str, str] = {}
