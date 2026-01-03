@@ -41,7 +41,9 @@ dependencies = [
     # --- Facebook scraping ---
     "facebook-scraper>=0.2.59",
 
-    # --- Twitter/X scraping
+    # --- Twitter/X scraping ---
+    "charset-normalizer>=3.3",
+    "cchardet; python_version < '3.11'",
     "twint @ git+https://github.com/twintproject/twint.git",
 
     # --- Translation (MarianMT) ---
@@ -83,4 +85,7 @@ include = ["src"]
 [tool.hatch.build]
 include = [
     "src/sitrepc2/reference/**/*",
+]
+exclude = [
+    "**/cchardet*",
 ]
