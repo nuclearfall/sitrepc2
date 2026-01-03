@@ -1,9 +1,10 @@
+# gui/ui/ingest_record_picker_dialog.py
 from __future__ import annotations
 
 import sqlite3
 from typing import List, Dict, Any
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QDate
 from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -26,7 +27,7 @@ USER_ROLE = Qt.UserRole
 class IngestRecordPickerDialog(QDialog):
     """
     Dialog for selecting ingest records from records.db,
-    with basic filtering support.
+    with explicit, sane filtering support.
     """
 
     # ------------------------------------------------------------------
@@ -48,14 +49,20 @@ class IngestRecordPickerDialog(QDialog):
         self.from_date = QDateEdit()
         self.from_date.setCalendarPopup(True)
         self.from_date.setDisplayFormat("yyyy-MM-dd")
-        self.from_date.setSpecialValueText("From…")
-        self.from_date.setDate(self.from_date.minimumDate())
+        self.from_date.setEnabled(False)
 
         self.to_date = QDateEdit()
         self.to_date.setCalendarPopup(True)
         self.to_date.setDisplayFormat("yyyy-MM-dd")
-        self.to_date.setSpecialValueText("To…")
-        self.to_date.setDate(self.to_date.maximumDate())
+        self.to_date.setEnabled(False)
+
+        # Enable dates only when the user explicitly interacts
+        self.from_date.dateChanged.connect(
+            lambda _: self.from_date.setEnabled(True)
+        )
+        self.to_date.dateChanged.connect(
+            lambda _: self.to_date.setEnabled(True)
+        )
 
         self.source_edit = QLineEdit()
         self.source_edit.setPlaceholderText("source (telegram, x, web…)")
@@ -106,26 +113,60 @@ class IngestRecordPickerDialog(QDialog):
         buttons.rejected.connect(self.reject)
         root.addWidget(buttons)
 
+        # Initialize date bounds from ingest data
+        self._init_date_bounds()
+
+        # Initial load (no filters)
         self._load_records()
 
     # ------------------------------------------------------------------
-    # Query / loading
+    # Date bounds
+    # ------------------------------------------------------------------
+
+    def _init_date_bounds(self) -> None:
+        """
+        Constrain date widgets to actual ingest data.
+        No implicit dates are set.
+        """
+        con = sqlite3.connect(records_path())
+        row = con.execute(
+            """
+            SELECT
+                MIN(published_at) AS min_date,
+                MAX(published_at) AS max_date
+            FROM ingest_posts
+            """
+        ).fetchone()
+        con.close()
+
+        if not row or not row[0] or not row[1]:
+            return
+
+        min_qdate = QDate.fromString(row[0][:10], "yyyy-MM-dd")
+        max_qdate = QDate.fromString(row[1][:10], "yyyy-MM-dd")
+
+        if min_qdate.isValid() and max_qdate.isValid():
+            self.from_date.setMinimumDate(min_qdate)
+            self.from_date.setMaximumDate(max_qdate)
+            self.to_date.setMinimumDate(min_qdate)
+            self.to_date.setMaximumDate(max_qdate)
+
+    # ------------------------------------------------------------------
+    # Query construction
     # ------------------------------------------------------------------
 
     def _build_query(self) -> tuple[str, Dict[str, Any]]:
-        """
-        Build SQL WHERE clause and parameter dict from UI state.
-        """
         where = []
         params: Dict[str, Any] = {}
 
-        if self.from_date.date().isValid():
+        # Date filters are applied ONLY if explicitly enabled
+        if self.from_date.isEnabled():
             where.append("published_at >= :from_date")
             params["from_date"] = (
                 self.from_date.date().toString("yyyy-MM-dd")
             )
 
-        if self.to_date.date().isValid():
+        if self.to_date.isEnabled():
             where.append("published_at <= :to_date")
             params["to_date"] = (
                 self.to_date.date().toString("yyyy-MM-dd") + "T23:59:59"
@@ -137,7 +178,9 @@ class IngestRecordPickerDialog(QDialog):
 
         if self.publisher_edit.text().strip():
             where.append("publisher LIKE :publisher")
-            params["publisher"] = f"%{self.publisher_edit.text().strip()}%"
+            params["publisher"] = (
+                f"%{self.publisher_edit.text().strip()}%"
+            )
 
         if self.alias_edit.text().strip():
             where.append("alias LIKE :alias")
@@ -168,6 +211,8 @@ class IngestRecordPickerDialog(QDialog):
         return sql, params
 
     # ------------------------------------------------------------------
+    # Data loading
+    # ------------------------------------------------------------------
 
     def _load_records(self) -> None:
         self.list_widget.clear()
@@ -176,7 +221,6 @@ class IngestRecordPickerDialog(QDialog):
         con.row_factory = sqlite3.Row
 
         sql, params = self._build_query()
-
         rows = con.execute(sql, params).fetchall()
 
         for row in rows:
@@ -193,7 +237,7 @@ class IngestRecordPickerDialog(QDialog):
         con.close()
 
     # ------------------------------------------------------------------
-    # API
+    # Public API
     # ------------------------------------------------------------------
 
     def selected_texts(self) -> List[str]:
