@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Optional
 
 from PySide6.QtCore import Qt, QDate, Signal
+from PySide6.QtGui import QColor
+
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -298,13 +300,17 @@ class IngestWorkspace(QWidget):
             QTableWidgetItem(row.text_snippet),
         ]
 
-        bg = STATE_COLOR.get(row.state)
+        bg_hex = STATE_COLOR.get(row.state)
+        bg_color = QColor(bg_hex) if bg_hex else None
 
         for col, item in enumerate(items):
             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-            if bg:
-                item.setBackground(bg)
+
+            if bg_color:
+                item.setBackground(bg_color)
+
             self.table.setItem(row_idx, col, item)
+
 
     # ------------------------------------------------------------------
     # Selection
