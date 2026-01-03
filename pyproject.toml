@@ -61,7 +61,7 @@ dependencies = [
 
 [project.scripts]
 sitrepc2 = "sitrepc2.cli.app:app"
-sitrepc2-gui = "sitrepc2.gui.main:main"
+src2gui = "sitrepc2.gui.app:main"
 docrule = "docrule.app:main"
 gazdbedit = "dbeditc2.app:main"
 
