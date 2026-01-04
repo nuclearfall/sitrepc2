@@ -7,10 +7,10 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
     QStackedWidget,
-    QApplication,
 )
 
 from sitrepc2.gui.ingest.ingest_workspace import IngestWorkspace
+from sitrepc2.gui.review.review_workspace import ReviewWorkspace
 
 
 # ============================================================================
@@ -24,10 +24,7 @@ class MainWindow(QMainWindow):
     Responsibilities:
     - Own workspace lifecycle
     - Host workspace stack
-    - Coordinate navigation (later)
-
-    Currently hosts:
-    - IngestWorkspace only
+    - Coordinate explicit navigation
     """
 
     # ------------------------------------------------------------------
@@ -39,11 +36,14 @@ class MainWindow(QMainWindow):
         self.resize(1400, 900)
 
         self._build_ui()
+        self._wire_signals()
 
+    # ------------------------------------------------------------------
+    # UI
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        self.workspace_stack = QStackedWidget()
+        self.workspace_stack = QStackedWidget(self)
         self.setCentralWidget(self.workspace_stack)
 
         # --------------------------------------------------------------
@@ -51,14 +51,31 @@ class MainWindow(QMainWindow):
         # --------------------------------------------------------------
 
         self.ingest_workspace = IngestWorkspace(self)
+        self.review_workspace = ReviewWorkspace(self)
+
         self.workspace_stack.addWidget(self.ingest_workspace)
+        self.workspace_stack.addWidget(self.review_workspace)
 
         # Default workspace
         self.workspace_stack.setCurrentWidget(self.ingest_workspace)
 
     # ------------------------------------------------------------------
-    # Future hooks (navigation, menus, etc.)
+    # Wiring
+    # ------------------------------------------------------------------
+
+    def _wire_signals(self) -> None:
+        self.ingest_workspace.extraction_completed.connect(
+            self.show_review
+        )
+
+    # ------------------------------------------------------------------
+    # Navigation
     # ------------------------------------------------------------------
 
     def show_ingest(self) -> None:
         self.workspace_stack.setCurrentWidget(self.ingest_workspace)
+
+    def show_review(self) -> None:
+        # Refresh review list in case state changed
+        self.review_workspace._load_posts()
+        self.workspace_stack.setCurrentWidget(self.review_workspace)

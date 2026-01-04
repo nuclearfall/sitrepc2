@@ -91,6 +91,8 @@ class LSSWorker(QThread):
 # ============================================================================
 
 class IngestWorkspace(QWidget):
+    extraction_completed = Signal()
+    
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
 
@@ -493,3 +495,15 @@ class IngestWorkspace(QWidget):
             if e.error:
                 lines.append(f"    {e.error}")
         self.fetch_log_view.setPlainText("\n".join(lines))
+
+    def _on_extract_finished(self) -> None:
+        if self._progress:
+            self._progress.close()
+            self._progress = None
+
+        self.btn_extract.setEnabled(True)
+        self._load_posts()
+
+        # 🔑 notify main window
+        self.extraction_completed.emit()
+
