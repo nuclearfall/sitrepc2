@@ -22,7 +22,7 @@ from sitrepc2.gui.ingest.controller import (
 )
 
 from sitrepc2.gui.review.controller import ReviewController
-from sitrepc2.dom.nodes import BaseNode
+from sitrepc2.dom.nodes import DomNode   # ✅ FIXED
 
 
 # ============================================================================
@@ -46,7 +46,7 @@ class ReviewWorkspace(QWidget):
         self.review = ReviewController(self.ingest.records_db_path)
 
         self._current_snapshot_id: Optional[int] = None
-        self._dom_nodes: Dict[str, BaseNode] = {}
+        self._dom_nodes: Dict[str, DomNode] = {}   # ✅ FIXED
 
         self._build_ui()
         self._load_posts()
@@ -163,13 +163,13 @@ class ReviewWorkspace(QWidget):
 
         self.tree.blockSignals(False)
 
-    def _build_tree_item(self, node: BaseNode) -> QTreeWidgetItem:
+    def _build_tree_item(self, node: DomNode) -> QTreeWidgetItem:   # ✅ FIXED
         selected = self.review.get_node_selection(
             dom_snapshot_id=self._current_snapshot_id,
             dom_node_id=node.node_id,
         )
 
-        item = QTreeWidgetItem([node.summary, node.node_type])
+        item = QTreeWidgetItem([node.summary, node.__class__.__name__])
         item.setData(0, Qt.UserRole, node.node_id)
         item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
         item.setCheckState(0, Qt.Checked if selected else Qt.Unchecked)
@@ -194,17 +194,13 @@ class ReviewWorkspace(QWidget):
         node_id = item.data(0, Qt.UserRole)
         checked = item.checkState(0) == Qt.Checked
 
-        # Persist this node
         self.review.set_node_selected(
             dom_snapshot_id=self._current_snapshot_id,
             dom_node_id=node_id,
             selected=checked,
         )
 
-        # Propagate to children
         self._propagate_to_children(item, checked)
-
-        # Update parents
         self._update_parent_state(item.parent())
 
     def _propagate_to_children(
