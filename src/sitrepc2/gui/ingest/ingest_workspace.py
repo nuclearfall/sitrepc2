@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Optional, List
+from datetime import timedelta
 
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QColor
@@ -71,7 +72,7 @@ class IngestWorkspace(QWidget):
 
         self._build_ui()
         self._load_sources()
-        self._init_date_bounds()
+        self._init_filter_date_bounds()
         self._load_posts()
 
     # ------------------------------------------------------------------
@@ -81,9 +82,9 @@ class IngestWorkspace(QWidget):
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
 
-        # --------------------------------------------------------------
-        # Toolbar
-        # --------------------------------------------------------------
+        # ==============================================================
+        # TOOLBAR (FETCH / EXECUTION)
+        # ==============================================================
 
         toolbar = QHBoxLayout()
 
@@ -91,27 +92,28 @@ class IngestWorkspace(QWidget):
         self.btn_disable = QPushButton("Disable")
         self.btn_remove = QPushButton("Remove")
 
+        self.fetch_from = QDateEdit()
+        self.fetch_to = QDateEdit()
+        self.force_check = QCheckBox("Force")
+
+        today = QDate.currentDate()
+        self.fetch_from.setDate(today.addDays(-1))
+        self.fetch_to.setDate(today)
+
+        for w in (self.fetch_from, self.fetch_to):
+            w.setCalendarPopup(True)
+            w.setDisplayFormat("yyyy-MM-dd")
+
         self.btn_fetch_selected = QPushButton("Fetch Selected")
         self.btn_fetch_all = QPushButton("Fetch All Enabled")
-
-        self.force_check = QCheckBox("Force")
-        self.fetch_from = QDateEdit()
-        self.fetch_from.setCalendarPopup(True)
-        self.fetch_from.setDisplayFormat("yyyy-MM-dd")
-        self.fetch_from.setDate(QDate.currentDate())
-
-        self.fetch_to = QDateEdit()
-        self.fetch_to.setCalendarPopup(True)
-        self.fetch_to.setDisplayFormat("yyyy-MM-dd")
-        self.fetch_to.setDate(QDate.currentDate())
 
         toolbar.addWidget(self.btn_enable)
         toolbar.addWidget(self.btn_disable)
         toolbar.addWidget(self.btn_remove)
         toolbar.addSpacing(20)
-        toolbar.addWidget(QLabel("From:"))
+        toolbar.addWidget(QLabel("Fetch from:"))
         toolbar.addWidget(self.fetch_from)
-        toolbar.addWidget(QLabel("To:"))
+        toolbar.addWidget(QLabel("to:"))
         toolbar.addWidget(self.fetch_to)
         toolbar.addWidget(self.force_check)
         toolbar.addSpacing(20)
@@ -121,20 +123,66 @@ class IngestWorkspace(QWidget):
 
         root.addLayout(toolbar)
 
-        # --------------------------------------------------------------
-        # Main splitter
-        # --------------------------------------------------------------
+        # ==============================================================
+        # FILTER ROW (POST INSPECTION)
+        # ==============================================================
+
+        filter_row = QHBoxLayout()
+
+        self.filter_from = QDateEdit()
+        self.filter_to = QDateEdit()
+
+        for w in (self.filter_from, self.filter_to):
+            w.setCalendarPopup(True)
+            w.setDisplayFormat("yyyy-MM-dd")
+            w.setEnabled(False)
+
+        self.filter_from.dateChanged.connect(
+            lambda _: self.filter_from.setEnabled(True)
+        )
+        self.filter_to.dateChanged.connect(
+            lambda _: self.filter_to.setEnabled(True)
+        )
+
+        self.filter_source = QLineEdit()
+        self.filter_source.setPlaceholderText("source")
+
+        self.filter_alias = QLineEdit()
+        self.filter_alias.setPlaceholderText("alias")
+
+        self.filter_lang = QLineEdit()
+        self.filter_lang.setPlaceholderText("lang")
+
+        btn_apply_filter = QPushButton("Apply Filters")
+        btn_apply_filter.clicked.connect(self._load_posts)
+
+        filter_row.addWidget(QLabel("Filter from:"))
+        filter_row.addWidget(self.filter_from)
+        filter_row.addWidget(QLabel("to:"))
+        filter_row.addWidget(self.filter_to)
+        filter_row.addWidget(self.filter_source)
+        filter_row.addWidget(self.filter_alias)
+        filter_row.addWidget(self.filter_lang)
+        filter_row.addWidget(btn_apply_filter)
+
+        root.addLayout(filter_row)
+
+        # ==============================================================
+        # MAIN SPLITTER
+        # ==============================================================
 
         splitter = QSplitter(Qt.Horizontal)
 
-        # Sources
+        # -------------------- Sources --------------------
+
         self.source_list = QListWidget()
         self.source_list.setSelectionMode(
             QAbstractItemView.ExtendedSelection
         )
         splitter.addWidget(self.source_list)
 
-        # Right side
+        # -------------------- Right panel --------------------
+
         right = QWidget()
         right_layout = QVBoxLayout(right)
 
@@ -167,9 +215,9 @@ class IngestWorkspace(QWidget):
 
         root.addWidget(splitter)
 
-        # --------------------------------------------------------------
-        # Wiring
-        # --------------------------------------------------------------
+        # ==============================================================
+        # SIGNALS
+        # ==============================================================
 
         self.table.itemSelectionChanged.connect(self._on_post_selected)
         self.btn_fetch_selected.clicked.connect(self._fetch_selected)
@@ -179,14 +227,14 @@ class IngestWorkspace(QWidget):
         self.btn_remove.clicked.connect(self._remove_sources)
 
     # ------------------------------------------------------------------
-    # Sources
+    # SOURCES
     # ------------------------------------------------------------------
 
     def _load_sources(self) -> None:
         self.source_list.clear()
 
         for src in self.sources.load_sources():
-            label = f"{src.alias}"
+            label = src.alias
             if not src.active:
                 label += " (inactive)"
 
@@ -198,8 +246,6 @@ class IngestWorkspace(QWidget):
 
             self.source_list.addItem(item)
 
-    # ------------------------------------------------------------------
-
     def _selected_source_names(self) -> List[str]:
         return [
             i.data(Qt.UserRole)
@@ -208,7 +254,7 @@ class IngestWorkspace(QWidget):
         ]
 
     # ------------------------------------------------------------------
-    # Fetching
+    # FETCHING
     # ------------------------------------------------------------------
 
     def _fetch_selected(self) -> None:
@@ -252,48 +298,42 @@ class IngestWorkspace(QWidget):
         self._load_posts()
 
     # ------------------------------------------------------------------
-    # Source state
+    # FILTERING / POSTS
     # ------------------------------------------------------------------
 
-    def _set_active(self, active: bool) -> None:
-        names = self._selected_source_names()
-        if names:
-            self.sources.set_active(names, active)
-            self._load_sources()
-
-    def _remove_sources(self) -> None:
-        names = self._selected_source_names()
-        if not names:
-            return
-
-        if QMessageBox.question(
-            self,
-            "Remove Sources",
-            "Mark selected sources as inactive?",
-        ) == QMessageBox.Yes:
-            for name in names:
-                self.sources.remove_source(name)
-            self._load_sources()
-
-    # ------------------------------------------------------------------
-    # Posts
-    # ------------------------------------------------------------------
-
-    def _init_date_bounds(self) -> None:
+    def _init_filter_date_bounds(self) -> None:
         rows = self.ingest.query_posts(IngestPostFilter())
         if not rows:
             return
 
         dates = [r.published_at[:10] for r in rows]
-        self.fetch_from.setMinimumDate(
-            QDate.fromString(min(dates), "yyyy-MM-dd")
-        )
-        self.fetch_to.setMaximumDate(
-            QDate.fromString(max(dates), "yyyy-MM-dd")
+        min_q = QDate.fromString(min(dates), "yyyy-MM-dd")
+        max_q = QDate.fromString(max(dates), "yyyy-MM-dd")
+
+        self.filter_from.setMinimumDate(min_q)
+        self.filter_from.setMaximumDate(max_q)
+        self.filter_to.setMinimumDate(min_q)
+        self.filter_to.setMaximumDate(max_q)
+
+    def _current_filter(self) -> IngestPostFilter:
+        return IngestPostFilter(
+            from_date=(
+                self.filter_from.date().toString("yyyy-MM-dd")
+                if self.filter_from.isEnabled()
+                else None
+            ),
+            to_date=(
+                self.filter_to.date().toString("yyyy-MM-dd")
+                if self.filter_to.isEnabled()
+                else None
+            ),
+            source=self.filter_source.text().strip() or None,
+            alias=self.filter_alias.text().strip() or None,
+            lang=self.filter_lang.text().strip() or None,
         )
 
     def _load_posts(self) -> None:
-        rows = self.ingest.query_posts(IngestPostFilter())
+        rows = self.ingest.query_posts(self._current_filter())
         self.table.setRowCount(len(rows))
 
         for r, row in enumerate(rows):
@@ -326,7 +366,7 @@ class IngestWorkspace(QWidget):
             self.table.setItem(row_idx, c, item)
 
     # ------------------------------------------------------------------
-    # Detail / Log
+    # DETAIL / LOG
     # ------------------------------------------------------------------
 
     def _on_post_selected(self) -> None:
@@ -334,8 +374,8 @@ class IngestWorkspace(QWidget):
         if not items:
             return
 
-        row = items[0].row()
-        post_id = self.ingest.query_posts(IngestPostFilter())[row].post_id
+        row_idx = items[0].row()
+        post_id = self.ingest.query_posts(self._current_filter())[row_idx].post_id
         detail = self.ingest.get_post(post_id)
         self.post_detail.setPlainText(detail.text)
 
