@@ -6,7 +6,7 @@ from datetime import datetime
 import sqlite3
 
 from sitrepc2.dom.dom_builder import build_dom_skeleton
-from sitrepc2.dom.nodes import BaseNode
+from sitrepc2.dom.nodes import DomNode   # ✅ FIXED
 
 
 # ============================================================================
@@ -38,7 +38,7 @@ class ReviewController:
         *,
         ingest_post_id: int,
         lss_run_id: int,
-    ) -> tuple[int, Dict[str, BaseNode]]:
+    ) -> tuple[int, Dict[str, DomNode]]:   # ✅ FIXED
         """
         Ensure INITIAL_REVIEW snapshot exists and DOM structure is materialized.
 
@@ -145,7 +145,7 @@ class ReviewController:
         dom_snapshot_id: int,
         ingest_post_id: int,
         lss_run_id: int,
-    ) -> Dict[str, BaseNode]:
+    ) -> Dict[str, DomNode]:   # ✅ FIXED
         """
         Build DOM skeleton from LSS and persist immutable structure.
         """
@@ -156,7 +156,6 @@ class ReviewController:
         )
 
         for node in nodes.values():
-            # dom_node (immutable)
             conn.execute(
                 """
                 INSERT OR IGNORE INTO dom_node (
@@ -177,7 +176,6 @@ class ReviewController:
                 ),
             )
 
-            # dom_node_state (snapshot-scoped)
             conn.execute(
                 """
                 INSERT OR IGNORE INTO dom_node_state (
