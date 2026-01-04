@@ -277,10 +277,6 @@ class IngestWorkspace(QWidget):
     # NLP
     # ------------------------------------------------------------------
 
-    def _ensure_nlp_manager(self):
-        if self._nlp_manager is None:
-            self._nlp_manager = build_holmes_and_nlp()
-
     def _selected_ingest_posts(self) -> List[dict]:
         rows = self.ingest.query_posts(IngestPostFilter())
         selected_rows = {i.row() for i in self.table.selectedItems()}
@@ -300,9 +296,7 @@ class IngestWorkspace(QWidget):
         ingest_posts = self._selected_ingest_posts()
         if not ingest_posts:
             return
-
-        self._ensure_nlp_manager()
-
+            
         self.btn_extract.setEnabled(False)
 
         self._progress = QProgressDialog(
