@@ -240,18 +240,34 @@ class IngestWorkspace(QWidget):
 
     def _extract_selected_posts(self) -> None:
         rows = self.ingest.query_posts(IngestPostFilter())
-        post_ids = sorted(
+
+        self._extract_post_ids = sorted(
             {
                 rows[i.row()].post_id
                 for i in self.table.selectedItems()
             }
         )
-        if not post_ids:
+        if not self._extract_post_ids:
             return
 
-        cmd = ["sitrepc2", "extract"]
-        for pid in post_ids:
-            cmd += ["--post-id", str(pid)]
+        self.btn_extract.setEnabled(False)
+
+        self._progress = QProgressDialog(
+            "Extracting events…", None, 0, len(self._extract_post_ids), self
+        )
+        self._progress.setWindowModality(Qt.NonModal)
+        self._progress.show()
+
+        self._run_next_extract()
+
+    def _run_next_extract(self) -> None:
+        if not self._extract_post_ids:
+            self._finish_extract()
+            return
+
+        post_id = self._extract_post_ids[0]
+
+        cmd = ["sitrepc2", "extract", "--post-id", str(post_id)]
         if self.chk_reprocess.isChecked():
             cmd.append("--reprocess")
 
@@ -259,38 +275,42 @@ class IngestWorkspace(QWidget):
             self._extract_process = subprocess.Popen(cmd)
         except Exception as exc:
             QMessageBox.critical(self, "Extract Failed", str(exc))
+            self._extract_post_ids.pop(0)
+            self._run_next_extract()
             return
-
-        self._extract_post_ids = post_ids
-        self.btn_extract.setEnabled(False)
-
-        self._progress = QProgressDialog(
-            "Extracting events…", None, 0, len(post_ids), self
-        )
-        self._progress.setWindowModality(Qt.NonModal)
-        self._progress.show()
 
         self._extract_timer.start(500)
 
     def _poll_extract_progress(self) -> None:
-        completed = self.ingest.count_completed_lss_runs(self._extract_post_ids)
-        total = len(self._extract_post_ids)
-
-        if self._progress:
-            self._progress.setMaximum(total)
-            self._progress.setValue(completed)
-
-        if completed >= total:
-            self._finish_extract()
+        if not self._extract_process:
             return
 
-        if self._extract_process and self._extract_process.poll() is not None:
+        if self._extract_process.poll() is None:
+            return  # still running
+
+        # process finished
+        self._extract_timer.stop()
+        self._extract_process = None
+
+        completed = self.ingest.count_completed_lss_runs(
+            [self._extract_post_ids[0]]
+        )
+
+        if completed:
+            self._extract_post_ids.pop(0)
+            self._progress.setValue(
+                self._progress.maximum() - len(self._extract_post_ids)
+            )
+            self._run_next_extract()
+        else:
             QMessageBox.warning(
                 self,
-                "Extraction Incomplete",
-                f"Extractor exited early ({completed}/{total} completed).",
+                "Extraction Failed",
+                f"LSS did not complete for post {self._extract_post_ids[0]}",
             )
-            self._finish_extract()
+            self._extract_post_ids.pop(0)
+            self._run_next_extract()
+
 
     def _finish_extract(self) -> None:
         self._extract_timer.stop()
