@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Optional
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction
+
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -11,7 +13,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QPushButton,
     QToolBar,
-    QAction
 )
 
 from sitrepc2.gui.ingest.ingest_workspace import IngestWorkspace
