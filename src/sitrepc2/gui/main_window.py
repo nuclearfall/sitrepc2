@@ -43,12 +43,8 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        self.workspace_stack = QStackedWidget(self)
+        self.workspace_stack = QStackedWidget()
         self.setCentralWidget(self.workspace_stack)
-
-        # --------------------------------------------------------------
-        # Workspaces
-        # --------------------------------------------------------------
 
         self.ingest_workspace = IngestWorkspace(self)
         self.review_workspace = ReviewWorkspace(self)
@@ -56,8 +52,11 @@ class MainWindow(QMainWindow):
         self.workspace_stack.addWidget(self.ingest_workspace)
         self.workspace_stack.addWidget(self.review_workspace)
 
-        # Default workspace
+        # 🔗 navigation wiring
+        self.ingest_workspace.review_requested.connect(self.show_review)
+
         self.workspace_stack.setCurrentWidget(self.ingest_workspace)
+
 
     # ------------------------------------------------------------------
     # Wiring
@@ -76,6 +75,4 @@ class MainWindow(QMainWindow):
         self.workspace_stack.setCurrentWidget(self.ingest_workspace)
 
     def show_review(self) -> None:
-        # Refresh review list in case state changed
-        self.review_workspace._load_posts()
         self.workspace_stack.setCurrentWidget(self.review_workspace)

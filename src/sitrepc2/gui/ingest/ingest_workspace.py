@@ -92,6 +92,7 @@ class LSSWorker(QThread):
 
 class IngestWorkspace(QWidget):
     extraction_completed = Signal()
+    review_requested = Signal()
     
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -504,6 +505,5 @@ class IngestWorkspace(QWidget):
         self.btn_extract.setEnabled(True)
         self._load_posts()
 
-        # 🔑 notify main window
-        self.extraction_completed.emit()
-
+        # ✅ request navigation to review
+        self.review_requested.emit()
