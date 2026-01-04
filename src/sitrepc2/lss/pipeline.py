@@ -54,7 +54,7 @@ def run_lss_pipeline(
     batch_size: int = 8,
     min_similarity: float = 0.0,
     reprocess: bool = False,
-    keep_nonspatial: bool = False,
+    keep_nonspatial: bool = True,
 ) -> None:
     if not ingest_posts:
         return
