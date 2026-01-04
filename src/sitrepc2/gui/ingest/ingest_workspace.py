@@ -580,12 +580,18 @@ class IngestWorkspace(QWidget):
     def _on_post_selected(self) -> None:
         items = self.table.selectedItems()
         if not items:
+            self.btn_extract.setEnabled(False)
+            self.post_detail.clear()
             return
+
+        # Enable Extract Events when there is a selection
+        self.btn_extract.setEnabled(True)
 
         row_idx = items[0].row()
         post_id = self.ingest.query_posts(IngestPostFilter())[row_idx].post_id
         detail = self.ingest.get_post(post_id)
         self.post_detail.setPlainText(detail.text)
+
 
     def _refresh_fetch_log(self) -> None:
         lines = []
