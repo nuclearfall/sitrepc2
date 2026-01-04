@@ -23,6 +23,9 @@ from PySide6.QtWidgets import (
     QTabWidget,
     QCheckBox,
     QMessageBox,
+    QComboBox,
+    QGroupBox,
+    QFormLayout,
 )
 
 from sitrepc2.gui.ingest.controller import (
@@ -30,9 +33,14 @@ from sitrepc2.gui.ingest.controller import (
     IngestPostFilter,
     IngestPostState,
 )
-from sitrepc2.gui.ingest.source_controller import SourceController
-from sitrepc2.gui.ingest.fetch_log_model import FetchLogModel, FetchLogEntry
-
+from sitrepc2.gui.ingest.source_controller import (
+    SourceController,
+    SourceRecord,
+)
+from sitrepc2.gui.ingest.fetch_log_model import (
+    FetchLogModel,
+    FetchLogEntry,
+)
 
 # ============================================================================
 # Lifecycle visuals
@@ -70,6 +78,9 @@ class IngestWorkspace(QWidget):
         self.sources = SourceController()
         self.fetch_log = FetchLogModel()
 
+        self._editing_new = False
+        self._current_source: Optional[SourceRecord] = None
+
         self._build_ui()
         self._load_sources()
         self._init_filter_date_bounds()
@@ -83,7 +94,7 @@ class IngestWorkspace(QWidget):
         root = QVBoxLayout(self)
 
         # ==============================================================
-        # TOOLBAR (FETCH / EXECUTION)
+        # TOOLBAR (FETCH)
         # ==============================================================
 
         toolbar = QHBoxLayout()
@@ -124,64 +135,68 @@ class IngestWorkspace(QWidget):
         root.addLayout(toolbar)
 
         # ==============================================================
-        # FILTER ROW (POST INSPECTION)
-        # ==============================================================
-
-        filter_row = QHBoxLayout()
-
-        self.filter_from = QDateEdit()
-        self.filter_to = QDateEdit()
-
-        for w in (self.filter_from, self.filter_to):
-            w.setCalendarPopup(True)
-            w.setDisplayFormat("yyyy-MM-dd")
-            w.setEnabled(False)
-
-        self.filter_from.dateChanged.connect(
-            lambda _: self.filter_from.setEnabled(True)
-        )
-        self.filter_to.dateChanged.connect(
-            lambda _: self.filter_to.setEnabled(True)
-        )
-
-        self.filter_source = QLineEdit()
-        self.filter_source.setPlaceholderText("source")
-
-        self.filter_alias = QLineEdit()
-        self.filter_alias.setPlaceholderText("alias")
-
-        self.filter_lang = QLineEdit()
-        self.filter_lang.setPlaceholderText("lang")
-
-        btn_apply_filter = QPushButton("Apply Filters")
-        btn_apply_filter.clicked.connect(self._load_posts)
-
-        filter_row.addWidget(QLabel("Filter from:"))
-        filter_row.addWidget(self.filter_from)
-        filter_row.addWidget(QLabel("to:"))
-        filter_row.addWidget(self.filter_to)
-        filter_row.addWidget(self.filter_source)
-        filter_row.addWidget(self.filter_alias)
-        filter_row.addWidget(self.filter_lang)
-        filter_row.addWidget(btn_apply_filter)
-
-        root.addLayout(filter_row)
-
-        # ==============================================================
         # MAIN SPLITTER
         # ==============================================================
 
         splitter = QSplitter(Qt.Horizontal)
 
-        # -------------------- Sources --------------------
+        # ==============================================================
+        # LEFT PANEL: Sources + Editor
+        # ==============================================================
+
+        left = QWidget()
+        left_layout = QVBoxLayout(left)
 
         self.source_list = QListWidget()
         self.source_list.setSelectionMode(
             QAbstractItemView.ExtendedSelection
         )
-        splitter.addWidget(self.source_list)
+        self.source_list.itemSelectionChanged.connect(
+            self._on_source_selection_changed
+        )
+        left_layout.addWidget(QLabel("Sources"))
+        left_layout.addWidget(self.source_list, stretch=1)
 
-        # -------------------- Right panel --------------------
+        # ---------------- Source Editor ----------------
+
+        editor_box = QGroupBox("Source Editor")
+        editor_layout = QFormLayout(editor_box)
+
+        self.ed_source_name = QLineEdit()
+        self.ed_alias = QLineEdit()
+
+        self.ed_kind = QComboBox()
+        self.ed_kind.addItems(["TELEGRAM", "FACEBOOK", "TWITTER", "HTTP"])
+
+        self.ed_lang = QLineEdit()
+        self.ed_active = QCheckBox("Active")
+
+        editor_layout.addRow("Source Name", self.ed_source_name)
+        editor_layout.addRow("Alias", self.ed_alias)
+        editor_layout.addRow("Kind", self.ed_kind)
+        editor_layout.addRow("Language", self.ed_lang)
+        editor_layout.addRow("", self.ed_active)
+
+        btn_row = QHBoxLayout()
+        self.btn_new = QPushButton("New")
+        self.btn_save = QPushButton("Save")
+        self.btn_revert = QPushButton("Revert")
+        self.btn_delete = QPushButton("Delete")
+
+        btn_row.addWidget(self.btn_new)
+        btn_row.addWidget(self.btn_save)
+        btn_row.addWidget(self.btn_revert)
+        btn_row.addWidget(self.btn_delete)
+
+        editor_layout.addRow(btn_row)
+
+        left_layout.addWidget(editor_box)
+
+        splitter.addWidget(left)
+
+        # ==============================================================
+        # RIGHT PANEL: Posts + Detail
+        # ==============================================================
 
         right = QWidget()
         right_layout = QVBoxLayout(right)
@@ -198,10 +213,8 @@ class IngestWorkspace(QWidget):
         right_layout.addWidget(self.table)
 
         self.tabs = QTabWidget()
-
         self.post_detail = QTextEdit()
         self.post_detail.setReadOnly(True)
-
         self.fetch_log_view = QTextEdit()
         self.fetch_log_view.setReadOnly(True)
 
@@ -219,12 +232,18 @@ class IngestWorkspace(QWidget):
         # SIGNALS
         # ==============================================================
 
-        self.table.itemSelectionChanged.connect(self._on_post_selected)
         self.btn_fetch_selected.clicked.connect(self._fetch_selected)
         self.btn_fetch_all.clicked.connect(self._fetch_all)
         self.btn_enable.clicked.connect(lambda: self._set_active(True))
         self.btn_disable.clicked.connect(lambda: self._set_active(False))
         self.btn_remove.clicked.connect(self._remove_sources)
+
+        self.btn_new.clicked.connect(self._new_source)
+        self.btn_save.clicked.connect(self._save_source)
+        self.btn_revert.clicked.connect(self._revert_source)
+        self.btn_delete.clicked.connect(self._delete_source)
+
+        self.table.itemSelectionChanged.connect(self._on_post_selected)
 
     # ------------------------------------------------------------------
     # SOURCES
@@ -232,50 +251,127 @@ class IngestWorkspace(QWidget):
 
     def _load_sources(self) -> None:
         self.source_list.clear()
-
         for src in self.sources.load_sources():
             label = src.alias
             if not src.active:
                 label += " (inactive)"
 
             item = QListWidgetItem(label)
-            item.setData(Qt.UserRole, src.source_name)
-
+            item.setData(Qt.UserRole, src)
             if not src.active:
                 item.setForeground(Qt.gray)
 
             self.source_list.addItem(item)
 
-    def _selected_source_names(self) -> List[str]:
-        return [
-            i.data(Qt.UserRole)
-            for i in self.source_list.selectedItems()
-            if isinstance(i.data(Qt.UserRole), str)
-        ]
+    def _on_source_selection_changed(self) -> None:
+        items = self.source_list.selectedItems()
 
-    def _set_active(self, active: bool) -> None:
-        names = self._selected_source_names()
-        if names:
-            self.sources.set_active(names, active)
+        if len(items) != 1:
+            self._clear_editor(disabled=True)
+            return
+
+        src: SourceRecord = items[0].data(Qt.UserRole)
+        self._load_source_into_editor(src)
+
+    # ------------------------------------------------------------------
+    # SOURCE EDITOR
+    # ------------------------------------------------------------------
+
+    def _clear_editor(self, disabled: bool = False) -> None:
+        for w in (
+            self.ed_source_name,
+            self.ed_alias,
+            self.ed_kind,
+            self.ed_lang,
+            self.ed_active,
+        ):
+            w.setEnabled(not disabled)
+            if hasattr(w, "clear"):
+                w.clear()
+
+        self.ed_active.setChecked(False)
+        self._current_source = None
+        self._editing_new = False
+
+    def _load_source_into_editor(self, src: SourceRecord) -> None:
+        self._current_source = src
+        self._editing_new = False
+
+        self.ed_source_name.setText(src.source_name)
+        self.ed_source_name.setEnabled(False)
+
+        self.ed_alias.setText(src.alias)
+        self.ed_kind.setCurrentText(src.source_kind)
+        self.ed_kind.setEnabled(False)
+        self.ed_lang.setText(src.source_lang)
+        self.ed_active.setChecked(src.active)
+
+    def _new_source(self) -> None:
+        self._editing_new = True
+        self._current_source = None
+
+        self.ed_source_name.setEnabled(True)
+        self.ed_kind.setEnabled(True)
+
+        self.ed_source_name.clear()
+        self.ed_alias.clear()
+        self.ed_lang.clear()
+        self.ed_active.setChecked(True)
+
+    def _save_source(self) -> None:
+        try:
+            if self._editing_new:
+                record = SourceRecord(
+                    source_name=self.ed_source_name.text().strip(),
+                    alias=self.ed_alias.text().strip(),
+                    source_kind=self.ed_kind.currentText(),
+                    source_lang=self.ed_lang.text().strip(),
+                    active=self.ed_active.isChecked(),
+                )
+                self.sources.add_source(record)
+            else:
+                if not self._current_source:
+                    return
+
+                self.sources.update_source(
+                    self._current_source.source_name,
+                    alias=self.ed_alias.text().strip(),
+                    source_lang=self.ed_lang.text().strip(),
+                    active=self.ed_active.isChecked(),
+                )
+
             self._load_sources()
+            self._clear_editor()
 
-    def _remove_sources(self) -> None:
-        names = self._selected_source_names()
-        if not names:
+        except Exception as exc:
+            QMessageBox.critical(self, "Source Error", str(exc))
+
+    def _revert_source(self) -> None:
+        if self._current_source:
+            self._load_source_into_editor(self._current_source)
+
+    def _delete_source(self) -> None:
+        if not self._current_source:
             return
 
         if QMessageBox.question(
             self,
-            "Remove Sources",
-            "Mark selected sources as inactive?",
+            "Delete Source",
+            "Mark this source as inactive?",
         ) == QMessageBox.Yes:
-            for name in names:
-                self.sources.remove_source(name)
+            self.sources.remove_source(self._current_source.source_name)
             self._load_sources()
+            self._clear_editor()
 
     # ------------------------------------------------------------------
     # FETCHING
     # ------------------------------------------------------------------
+
+    def _selected_source_names(self) -> List[str]:
+        return [
+            i.data(Qt.UserRole).source_name
+            for i in self.source_list.selectedItems()
+        ]
 
     def _fetch_selected(self) -> None:
         names = self._selected_source_names()
@@ -293,17 +389,12 @@ class IngestWorkspace(QWidget):
         self._fetch(names)
 
     def _fetch(self, source_names: List[str]) -> None:
-        for sn in source_names:
-            print(f"{source_names}")
-        start_date = self.fetch_from.date().toString("yyyy-MM-dd")
-        end_date = self.fetch_to.date().toString("yyyy-MM-dd")
         results = self.sources.fetch_sources(
             source_names=source_names,
-            start_date=start_date,
-            end_date=end_date,
+            start_date=self.fetch_from.date().toString("yyyy-MM-dd"),
+            end_date=self.fetch_to.date().toString("yyyy-MM-dd"),
             force=self.force_check.isChecked(),
         )
-        print(f"Now fetching from {self.sources} for {start_date} through {end_date}")
 
         for r in results:
             self.fetch_log.add(
@@ -323,7 +414,7 @@ class IngestWorkspace(QWidget):
         self._load_posts()
 
     # ------------------------------------------------------------------
-    # FILTERING / POSTS
+    # POSTS / FILTERING
     # ------------------------------------------------------------------
 
     def _init_filter_date_bounds(self) -> None:
@@ -332,33 +423,11 @@ class IngestWorkspace(QWidget):
             return
 
         dates = [r.published_at[:10] for r in rows]
-        min_q = QDate.fromString(min(dates), "yyyy-MM-dd")
-        max_q = QDate.fromString(max(dates), "yyyy-MM-dd")
-
-        self.filter_from.setMinimumDate(min_q)
-        self.filter_from.setMaximumDate(max_q)
-        self.filter_to.setMinimumDate(min_q)
-        self.filter_to.setMaximumDate(max_q)
-
-    def _current_filter(self) -> IngestPostFilter:
-        return IngestPostFilter(
-            from_date=(
-                self.filter_from.date().toString("yyyy-MM-dd")
-                if self.filter_from.isEnabled()
-                else None
-            ),
-            to_date=(
-                self.filter_to.date().toString("yyyy-MM-dd")
-                if self.filter_to.isEnabled()
-                else None
-            ),
-            source=self.filter_source.text().strip() or None,
-            alias=self.filter_alias.text().strip() or None,
-            lang=self.filter_lang.text().strip() or None,
-        )
+        self._min_date = QDate.fromString(min(dates), "yyyy-MM-dd")
+        self._max_date = QDate.fromString(max(dates), "yyyy-MM-dd")
 
     def _load_posts(self) -> None:
-        rows = self.ingest.query_posts(self._current_filter())
+        rows = self.ingest.query_posts(IngestPostFilter())
         self.table.setRowCount(len(rows))
 
         for r, row in enumerate(rows):
@@ -400,7 +469,7 @@ class IngestWorkspace(QWidget):
             return
 
         row_idx = items[0].row()
-        post_id = self.ingest.query_posts(self._current_filter())[row_idx].post_id
+        post_id = self.ingest.query_posts(IngestPostFilter())[row_idx].post_id
         detail = self.ingest.get_post(post_id)
         self.post_detail.setPlainText(detail.text)
 

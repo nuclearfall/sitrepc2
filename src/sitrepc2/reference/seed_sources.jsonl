@@ -2,5 +2,5 @@
 {"source_name": "GeneralStaffZSU", "alias": "Ukraine", "source_lang": "uk", "active": true, "source_kind": "TELEGRAM"}
 {"source_name": "deepstatemap", "alias": "DeepState", "source_lang": "uk", "active": false, "source_kind": "TELEGRAM"}
 {"source_name": "rybar_in_english", "alias": "Rybar", "source_lang": "ru", "active": true, "source_kind": "TELEGRAM"}
-{"source_name": "Suryiak_maps", "alias": "Suryiak", "source_lang": "en", "active": true, "source_kind": "TELEGRAM"}
+{"source_name": "Suriyak_maps", "alias": "Suriyak", "source_lang": "en", "active": true, "source_kind": "TELEGRAM"}
 {"source_name": "AMK_Mapping", "alias": "AMK", "source_lang": "en", "active": true, "source_kind": "TELEGRAM"}
