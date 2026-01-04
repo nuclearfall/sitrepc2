@@ -293,12 +293,17 @@ class IngestWorkspace(QWidget):
         self._fetch(names)
 
     def _fetch(self, source_names: List[str]) -> None:
+        for sn in source_names:
+            print(f"{source_name}")
+        start_date = self.fetch_from.date().toString("yyyy-MM-dd")
+        end_date = self.fetch_to.date().toString("yyyy-MM-dd")
         results = self.sources.fetch_sources(
             source_names=source_names,
-            start_date=self.fetch_from.date().toString("yyyy-MM-dd"),
-            end_date=self.fetch_to.date().toString("yyyy-MM-dd"),
+            start_date=start_date,
+            end_date=end_date,
             force=self.force_check.isChecked(),
         )
+        print(f"Now fetching from {self.sources} for {start_date} through {end_date}")
 
         for r in results:
             self.fetch_log.add(
