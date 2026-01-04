@@ -435,8 +435,8 @@ class IngestWorkspace(QWidget):
 
         for c, item in enumerate(items):
             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-            if bg:
-                item.setBackground(bg)
+            # if bg:
+            #     item.setBackground(bg)
             self.table.setItem(row_idx, c, item)
 
     def _on_post_selected(self) -> None:
