@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from typing import Optional, List
 
 from PySide6.QtCore import Qt, QDate, QTimer
@@ -71,9 +72,8 @@ class IngestWorkspace(QWidget):
         self._editing_new = False
         self._loaded_source_name: Optional[str] = None
 
-        # extract / subprocess state
+        # extract subprocess state
         self._extract_process: Optional[subprocess.Popen] = None
-        self._extract_post_ids: list[int] = []
         self._progress: Optional[QProgressDialog] = None
         self._extract_timer = QTimer(self)
         self._extract_timer.timeout.connect(self._poll_extract_progress)
@@ -194,7 +194,6 @@ class IngestWorkspace(QWidget):
         self.table.itemSelectionChanged.connect(self._on_post_selected)
         right_layout.addWidget(self.table)
 
-        # Extract controls
         extract_bar = QHBoxLayout()
         self.chk_reprocess = QCheckBox("Reprocess")
         self.btn_extract = QPushButton("Extract Events")
@@ -205,10 +204,8 @@ class IngestWorkspace(QWidget):
         right_layout.addLayout(extract_bar)
 
         self.tabs = QTabWidget()
-        self.post_detail = QTextEdit()
-        self.post_detail.setReadOnly(True)
-        self.fetch_log_view = QTextEdit()
-        self.fetch_log_view.setReadOnly(True)
+        self.post_detail = QTextEdit(readOnly=True)
+        self.fetch_log_view = QTextEdit(readOnly=True)
         self.tabs.addTab(self.post_detail, "Post Detail")
         self.tabs.addTab(self.fetch_log_view, "Fetch Log")
         right_layout.addWidget(self.tabs)
@@ -217,21 +214,16 @@ class IngestWorkspace(QWidget):
         splitter.setStretchFactor(1, 3)
         root.addWidget(splitter)
 
-        # ==============================================================
         # Wiring
-        # ==============================================================
-
         self.btn_fetch_selected.clicked.connect(self._fetch_selected)
         self.btn_fetch_all.clicked.connect(self._fetch_all)
         self.btn_enable.clicked.connect(lambda: self._set_active(True))
         self.btn_disable.clicked.connect(lambda: self._set_active(False))
         self.btn_remove.clicked.connect(self._remove_sources)
-
         self.btn_new.clicked.connect(self._new_source)
         self.btn_save.clicked.connect(self._save_source)
         self.btn_revert.clicked.connect(self._revert_source)
         self.btn_delete.clicked.connect(self._delete_source)
-
         self.btn_extract.clicked.connect(self._extract_selected_posts)
 
     # ------------------------------------------------------------------
@@ -241,24 +233,18 @@ class IngestWorkspace(QWidget):
     def _extract_selected_posts(self) -> None:
         rows = self.ingest.query_posts(IngestPostFilter())
 
-        # Collect unique selected post IDs (row selection can duplicate)
-        post_ids = sorted(
-            {
-                rows[item.row()].post_id
-                for item in self.table.selectedItems()
-            }
-        )
+        post_ids = sorted({
+            rows[item.row()].post_id
+            for item in self.table.selectedItems()
+        })
 
         if not post_ids:
             return
 
-        # Build command using *current interpreter*
-        import sys
-
         cmd = [
             sys.executable,
             "-m",
-            "sitrepc2",
+            "sitrepc2.cli.extract_cmd",
             "extract",
         ]
 
@@ -268,7 +254,6 @@ class IngestWorkspace(QWidget):
         if self.chk_reprocess.isChecked():
             cmd.append("--reprocess")
 
-        # Launch subprocess
         try:
             self._extract_process = subprocess.Popen(
                 cmd,
@@ -280,45 +265,18 @@ class IngestWorkspace(QWidget):
             QMessageBox.critical(self, "Extract Failed", str(exc))
             return
 
-        # UI state
         self.btn_extract.setEnabled(False)
 
         self._progress = QProgressDialog(
             "Extracting events…",
             None,
             0,
-            0,  # indeterminate; CLI is authoritative
+            0,
             self,
         )
         self._progress.setWindowModality(Qt.NonModal)
         self._progress.setMinimumDuration(0)
         self._progress.show()
-
-        # Poll for completion only
-        self._extract_timer.start(500)
-
-
-    def _run_next_extract(self) -> None:
-        if not self._extract_post_ids:
-            self._finish_extract()
-            return
-
-        post_id = self._extract_post_ids[0]
-
-        cmd = [
-            sys.executable,
-            "-m",
-            "sitrepc2.cli.extract_cmd",
-            "extract",
-        ]
-
-        try:
-            self._extract_process = subprocess.Popen(cmd)
-        except Exception as exc:
-            QMessageBox.critical(self, "Extract Failed", str(exc))
-            self._extract_post_ids.pop(0)
-            self._run_next_extract()
-            return
 
         self._extract_timer.start(500)
 
@@ -327,17 +285,12 @@ class IngestWorkspace(QWidget):
             return
 
         if self._extract_process.poll() is None:
-            return  # still running
+            return
 
-        # Process finished
         stdout, stderr = self._extract_process.communicate()
 
         if stderr:
-            QMessageBox.warning(
-                self,
-                "Extraction Warning",
-                stderr.strip(),
-            )
+            QMessageBox.warning(self, "Extraction Warning", stderr.strip())
 
         self._finish_extract()
 
@@ -350,10 +303,7 @@ class IngestWorkspace(QWidget):
 
         self._extract_process = None
         self.btn_extract.setEnabled(True)
-
-        # Refresh ingest table to show new lifecycle state
         self._load_posts()
-
 
     # ------------------------------------------------------------------
     # Posts
@@ -362,17 +312,14 @@ class IngestWorkspace(QWidget):
     def _load_posts(self) -> None:
         rows = self.ingest.query_posts(IngestPostFilter())
         self.table.setRowCount(len(rows))
-
         for r, row in enumerate(rows):
             self._populate_row(r, row)
-
         self.table.resizeColumnsToContents()
         self.table.setColumnWidth(0, 160)
 
     def _populate_row(self, row_idx: int, row) -> None:
         icon = STATE_ICON.get(row.state, "")
         text = f"{icon} {row.state.value.replace('_', ' ')}"
-
         items = [
             QTableWidgetItem(text),
             QTableWidgetItem(row.published_at),
@@ -382,7 +329,6 @@ class IngestWorkspace(QWidget):
             QTableWidgetItem(str(row.event_count)),
             QTableWidgetItem(row.text_snippet),
         ]
-
         for c, item in enumerate(items):
             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
             self.table.setItem(row_idx, c, item)
@@ -393,25 +339,20 @@ class IngestWorkspace(QWidget):
             self.btn_extract.setEnabled(False)
             self.post_detail.clear()
             return
-
         self.btn_extract.setEnabled(True)
-
         rows = self.ingest.query_posts(IngestPostFilter())
         row_idx = items[0].row()
-        post_id = rows[row_idx].post_id
-        detail = self.ingest.get_post(post_id)
+        detail = self.ingest.get_post(rows[row_idx].post_id)
         self.post_detail.setPlainText(detail.text)
 
     # ------------------------------------------------------------------
-    # Sources list + editor
+    # Sources / Fetch (unchanged)
     # ------------------------------------------------------------------
 
     def _load_sources(self) -> None:
         self.source_list.clear()
         for src in self.sources.load_sources():
-            label = src.alias
-            if not src.active:
-                label += " (inactive)"
+            label = src.alias + ("" if src.active else " (inactive)")
             item = QListWidgetItem(label)
             item.setData(Qt.UserRole, src)
             if not src.active:
@@ -436,9 +377,9 @@ class IngestWorkspace(QWidget):
             self._loaded_source_name = None
 
     def _clear_editor_fields(self) -> None:
-        self.ed_source_name.setText("")
-        self.ed_alias.setText("")
-        self.ed_lang.setText("")
+        self.ed_source_name.clear()
+        self.ed_alias.clear()
+        self.ed_lang.clear()
         self.ed_active.setChecked(True)
         self.ed_kind.setCurrentIndex(0)
         self._editing_new = False
@@ -457,7 +398,6 @@ class IngestWorkspace(QWidget):
         self._editing_new = True
         self._loaded_source_name = None
         self._clear_editor_fields()
-        self._editing_new = True
 
     def _revert_source(self) -> None:
         if not self._loaded_source_name:
@@ -480,30 +420,19 @@ class IngestWorkspace(QWidget):
                 self.sources.add_source(record)
             else:
                 self.sources.replace_source(self._loaded_source_name, record)
-
             self._load_sources()
             self._clear_editor_fields()
-
         except Exception as exc:
             QMessageBox.critical(self, "Source Error", str(exc))
 
     def _delete_source(self) -> None:
         if not self._loaded_source_name:
             return
-        if QMessageBox.question(
-            self, "Delete Source", "Hard delete this source?"
-        ) != QMessageBox.Yes:
+        if QMessageBox.question(self, "Delete Source", "Hard delete this source?") != QMessageBox.Yes:
             return
-        try:
-            self.sources.delete_source_hard(self._loaded_source_name)
-            self._load_sources()
-            self._clear_editor_fields()
-        except Exception as exc:
-            QMessageBox.critical(self, "Delete Error", str(exc))
-
-    # ------------------------------------------------------------------
-    # Enable / Disable / Remove toolbar ops
-    # ------------------------------------------------------------------
+        self.sources.delete_source_hard(self._loaded_source_name)
+        self._load_sources()
+        self._clear_editor_fields()
 
     def _set_active(self, active: bool) -> None:
         names = self._selected_source_names()
@@ -515,21 +444,12 @@ class IngestWorkspace(QWidget):
         names = self._selected_source_names()
         if not names:
             return
-        if QMessageBox.question(
-            self, "Remove Sources", "Hard delete selected sources?"
-        ) != QMessageBox.Yes:
+        if QMessageBox.question(self, "Remove Sources", "Hard delete selected sources?") != QMessageBox.Yes:
             return
-        try:
-            for n in names:
-                self.sources.delete_source_hard(n)
-            self._load_sources()
-            self._clear_editor_fields()
-        except Exception as exc:
-            QMessageBox.critical(self, "Remove Error", str(exc))
-
-    # ------------------------------------------------------------------
-    # Fetching
-    # ------------------------------------------------------------------
+        for n in names:
+            self.sources.delete_source_hard(n)
+        self._load_sources()
+        self._clear_editor_fields()
 
     def _fetch_selected(self) -> None:
         names = self._selected_source_names()
@@ -548,18 +468,7 @@ class IngestWorkspace(QWidget):
             force=self.force_check.isChecked(),
         )
         for r in results:
-            self.fetch_log.add(
-                FetchLogEntry(
-                    timestamp=r.timestamp,
-                    source_name=r.source_name,
-                    source_kind=r.source_kind,
-                    start_date=r.start_date,
-                    end_date=r.end_date,
-                    force=r.force,
-                    fetched_count=r.fetched_count,
-                    error=r.error,
-                )
-            )
+            self.fetch_log.add(FetchLogEntry(**r.__dict__))
         self._refresh_fetch_log()
         self._load_posts()
 
