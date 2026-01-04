@@ -305,9 +305,12 @@ class IngestWorkspace(QWidget):
 
         post_id = self._extract_post_ids[0]
 
-        cmd = ["sitrepc2", "extract", "--post-id", str(post_id)]
-        if self.chk_reprocess.isChecked():
-            cmd.append("--reprocess")
+        cmd = [
+            sys.executable,
+            "-m",
+            "sitrepc2.cli.extract_cmd",
+            "extract",
+        ]
 
         try:
             self._extract_process = subprocess.Popen(cmd)
