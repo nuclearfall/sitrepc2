@@ -7,6 +7,9 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
     QStackedWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
 )
 
 from sitrepc2.gui.ingest.ingest_workspace import IngestWorkspace
@@ -43,17 +46,51 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
+        central = QWidget(self)
+        layout = QVBoxLayout(central)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # --------------------------------------------------
+        # Workspace switcher
+        # --------------------------------------------------
+
+        switcher = QHBoxLayout()
+        switcher.setContentsMargins(8, 6, 8, 6)
+
+        self.btn_ingest = QPushButton("Ingest")
+        self.btn_review = QPushButton("Review")
+
+        for btn in (self.btn_ingest, self.btn_review):
+            btn.setCheckable(True)
+            btn.setFlat(True)
+
+        self.btn_ingest.setChecked(True)
+
+        switcher.addWidget(self.btn_ingest)
+        switcher.addWidget(self.btn_review)
+        switcher.addStretch()
+
+        layout.addLayout(switcher)
+
+        # --------------------------------------------------
+        # Workspace stack
+        # --------------------------------------------------
+
         self.workspace_stack = QStackedWidget()
-        self.setCentralWidget(self.workspace_stack)
+        layout.addWidget(self.workspace_stack)
+
+        self.setCentralWidget(central)
+
+        # --------------------------------------------------
+        # Workspaces
+        # --------------------------------------------------
 
         self.ingest_workspace = IngestWorkspace(self)
         self.review_workspace = ReviewWorkspace(self)
 
         self.workspace_stack.addWidget(self.ingest_workspace)
         self.workspace_stack.addWidget(self.review_workspace)
-
-        # 🔗 navigation wiring
-        self.ingest_workspace.review_requested.connect(self.show_review)
 
         self.workspace_stack.setCurrentWidget(self.ingest_workspace)
 
@@ -63,16 +100,24 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _wire_signals(self) -> None:
-        self.ingest_workspace.extraction_completed.connect(
-            self.show_review
-        )
+        self.btn_ingest.clicked.connect(self.show_ingest)
+        self.btn_review.clicked.connect(self.show_review)
+
 
     # ------------------------------------------------------------------
     # Navigation
     # ------------------------------------------------------------------
 
     def show_ingest(self) -> None:
+        self.btn_ingest.setChecked(True)
+        self.btn_review.setChecked(False)
         self.workspace_stack.setCurrentWidget(self.ingest_workspace)
 
     def show_review(self) -> None:
+        self.btn_ingest.setChecked(False)
+        self.btn_review.setChecked(True)
+
+        # refresh review data every time
+        self.review_workspace._load_posts()
+
         self.workspace_stack.setCurrentWidget(self.review_workspace)
