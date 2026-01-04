@@ -51,7 +51,6 @@ from sitrepc2.gui.ingest.fetch_log_model import (
 # ============================================================================
 # LSS Worker
 # ============================================================================
-
 class LSSWorker(QObject):
     progress = Signal(int, int)
     finished = Signal()
@@ -85,8 +84,6 @@ class LSSWorker(QObject):
 
         except Exception as exc:
             self.failed.emit(str(exc))
-
-
 
 # ============================================================================
 # Lifecycle visuals
@@ -320,7 +317,6 @@ class IngestWorkspace(QWidget):
             ingest_posts=ingest_posts,
             reprocess=self.chk_reprocess.isChecked(),
         )
-
         worker.moveToThread(self._nlp_thread)
 
         self._nlp_thread.started.connect(worker.run)
@@ -350,7 +346,252 @@ class IngestWorkspace(QWidget):
         QMessageBox.critical(self, "NLP Extraction Failed", message)
 
     # ------------------------------------------------------------------
-    # (Everything else below is unchanged: sources, fetching, table, etc.)
+    # Sources list
     # ------------------------------------------------------------------
 
-    # ... remainder identical to your previous implementation ...
+    def _load_sources(self) -> None:
+        self.source_list.clear()
+        for src in self.sources.load_sources():
+            label = src.alias
+            if not src.active:
+                label += " (inactive)"
+            item = QListWidgetItem(label)
+            item.setData(Qt.UserRole, src)
+            if not src.active:
+                item.setForeground(Qt.gray)
+            self.source_list.addItem(item)
+
+    def _selected_sources(self) -> List[SourceRecord]:
+        out: List[SourceRecord] = []
+        for i in self.source_list.selectedItems():
+            src = i.data(Qt.UserRole)
+            if isinstance(src, SourceRecord):
+                out.append(src)
+        return out
+
+    def _selected_source_names(self) -> List[str]:
+        return [s.source_name for s in self._selected_sources()]
+
+    def _on_source_selection_changed(self) -> None:
+        items = self._selected_sources()
+        if len(items) == 1:
+            self._load_source_into_editor(items[0])
+        else:
+            # No disabling: just clear the loaded identity so Save behaves as "New" only if user hit New.
+            self._loaded_source_name = None
+
+    # ------------------------------------------------------------------
+    # Source editor helpers
+    # ------------------------------------------------------------------
+
+    def _clear_editor_fields(self) -> None:
+        # IMPORTANT: do NOT call self.ed_kind.clear() (it would remove combo items)
+        self.ed_source_name.setText("")
+        self.ed_alias.setText("")
+        self.ed_lang.setText("")
+        self.ed_active.setChecked(True)
+        self.ed_kind.setCurrentIndex(0)
+
+        self._editing_new = False
+        self._loaded_source_name = None
+
+    def _load_source_into_editor(self, src: SourceRecord) -> None:
+        self._editing_new = False
+        self._loaded_source_name = src.source_name
+
+        self.ed_source_name.setText(src.source_name)
+        self.ed_alias.setText(src.alias)
+        self.ed_kind.setCurrentText(src.source_kind)
+        self.ed_lang.setText(src.source_lang)
+        self.ed_active.setChecked(src.active)
+
+    def _new_source(self) -> None:
+        self._editing_new = True
+        self._loaded_source_name = None
+        self._clear_editor_fields()
+        self._editing_new = True  # reassert
+
+    def _revert_source(self) -> None:
+        if not self._loaded_source_name:
+            return
+        # Reload from disk to avoid stale UI state
+        for s in self.sources.load_sources():
+            if s.source_name == self._loaded_source_name:
+                self._load_source_into_editor(s)
+                return
+
+    def _save_source(self) -> None:
+        try:
+            record = SourceRecord(
+                source_name=self.ed_source_name.text().strip(),
+                alias=self.ed_alias.text().strip(),
+                source_kind=self.ed_kind.currentText().strip(),
+                source_lang=self.ed_lang.text().strip(),
+                active=self.ed_active.isChecked(),
+            )
+
+            if not record.source_name:
+                raise ValueError("source_name is required")
+            if not record.alias:
+                raise ValueError("alias is required")
+            if not record.source_lang:
+                raise ValueError("source_lang is required")
+            if not record.source_kind:
+                raise ValueError("source_kind is required")
+
+            if self._editing_new or not self._loaded_source_name:
+                # add
+                self.sources.add_source(record)
+            else:
+                # replace (allows renaming and kind changes)
+                self.sources.replace_source(self._loaded_source_name, record)
+
+            self._load_sources()
+            self._clear_editor_fields()
+
+        except Exception as exc:
+            QMessageBox.critical(self, "Source Error", str(exc))
+
+    def _delete_source(self) -> None:
+        if not self._loaded_source_name:
+            return
+
+        if QMessageBox.question(
+            self,
+            "Delete Source",
+            "Hard delete this source from sources.jsonl?",
+        ) != QMessageBox.Yes:
+            return
+
+        try:
+            self.sources.delete_source_hard(self._loaded_source_name)
+            self._load_sources()
+            self._clear_editor_fields()
+        except Exception as exc:
+            QMessageBox.critical(self, "Delete Error", str(exc))
+
+    # ------------------------------------------------------------------
+    # Enable/Disable/Remove toolbar ops
+    # ------------------------------------------------------------------
+
+    def _set_active(self, active: bool) -> None:
+        names = self._selected_source_names()
+        if not names:
+            return
+        self.sources.set_active(names, active)
+        self._load_sources()
+
+    def _remove_sources(self) -> None:
+        # Per your new requirement, "deletes should be hard deletes" — so Remove = hard delete.
+        names = self._selected_source_names()
+        if not names:
+            return
+
+        if QMessageBox.question(
+            self,
+            "Remove Sources",
+            "Hard delete selected sources from sources.jsonl?",
+        ) != QMessageBox.Yes:
+            return
+
+        try:
+            for name in names:
+                self.sources.delete_source_hard(name)
+            self._load_sources()
+            self._clear_editor_fields()
+        except Exception as exc:
+            QMessageBox.critical(self, "Remove Error", str(exc))
+
+    # ------------------------------------------------------------------
+    # Fetching
+    # ------------------------------------------------------------------
+
+    def _fetch_selected(self) -> None:
+        names = self._selected_source_names()
+        if not names:
+            QMessageBox.information(self, "Fetch", "No sources selected.")
+            return
+        self._fetch(names)
+
+    def _fetch_all(self) -> None:
+        names = [s.source_name for s in self.sources.load_sources() if s.active]
+        self._fetch(names)
+
+    def _fetch(self, source_names: List[str]) -> None:
+        results = self.sources.fetch_sources(
+            source_names=source_names,
+            start_date=self.fetch_from.date().toString("yyyy-MM-dd"),
+            end_date=self.fetch_to.date().toString("yyyy-MM-dd"),
+            force=self.force_check.isChecked(),
+        )
+
+        for r in results:
+            self.fetch_log.add(
+                FetchLogEntry(
+                    timestamp=r.timestamp,
+                    source_name=r.source_name,
+                    source_kind=r.source_kind,
+                    start_date=r.start_date,
+                    end_date=r.end_date,
+                    force=r.force,
+                    fetched_count=r.fetched_count,
+                    error=r.error,
+                )
+            )
+
+        self._refresh_fetch_log()
+        self._load_posts()
+
+    # ------------------------------------------------------------------
+    # Posts
+    # ------------------------------------------------------------------
+
+    def _load_posts(self) -> None:
+        rows = self.ingest.query_posts(IngestPostFilter())
+        self.table.setRowCount(len(rows))
+
+        for r, row in enumerate(rows):
+            self._populate_row(r, row)
+
+        self.table.resizeColumnsToContents()
+        self.table.setColumnWidth(0, 160)
+
+    def _populate_row(self, row_idx: int, row) -> None:
+        icon = STATE_ICON.get(row.state, "")
+        text = f"{icon} {row.state.value.replace('_', ' ')}"
+
+        items = [
+            QTableWidgetItem(text),
+            QTableWidgetItem(row.published_at),
+            QTableWidgetItem(row.alias),
+            QTableWidgetItem(row.source),
+            QTableWidgetItem(row.lang),
+            QTableWidgetItem(str(row.event_count)),
+            QTableWidgetItem(row.text_snippet),
+        ]
+
+        # bg_hex = STATE_COLOR.get(row.state)
+        # bg = QColor(bg_hex) if bg_hex else None
+
+        for c, item in enumerate(items):
+            item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+            self.table.setItem(row_idx, c, item)
+
+    def _on_post_selected(self) -> None:
+        items = self.table.selectedItems()
+        if not items:
+            return
+
+        row_idx = items[0].row()
+        post_id = self.ingest.query_posts(IngestPostFilter())[row_idx].post_id
+        detail = self.ingest.get_post(post_id)
+        self.post_detail.setPlainText(detail.text)
+
+    def _refresh_fetch_log(self) -> None:
+        lines = []
+        for e in self.fetch_log.entries():
+            status = "ERROR" if e.error else f"{e.fetched_count} posts"
+            lines.append(f"[{e.timestamp}] {e.source_name} ({e.source_kind}) → {status}")
+            if e.error:
+                lines.append(f"    {e.error}")
+        self.fetch_log_view.setPlainText("\n".join(lines))
