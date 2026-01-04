@@ -241,24 +241,62 @@ class IngestWorkspace(QWidget):
     def _extract_selected_posts(self) -> None:
         rows = self.ingest.query_posts(IngestPostFilter())
 
-        self._extract_post_ids = sorted(
+        # Collect unique selected post IDs (row selection can duplicate)
+        post_ids = sorted(
             {
-                rows[i.row()].post_id
-                for i in self.table.selectedItems()
+                rows[item.row()].post_id
+                for item in self.table.selectedItems()
             }
         )
-        if not self._extract_post_ids:
+
+        if not post_ids:
             return
 
+        # Build command using *current interpreter*
+        import sys
+
+        cmd = [
+            sys.executable,
+            "-m",
+            "sitrepc2",
+            "extract",
+        ]
+
+        for pid in post_ids:
+            cmd.extend(["--post-id", str(pid)])
+
+        if self.chk_reprocess.isChecked():
+            cmd.append("--reprocess")
+
+        # Launch subprocess
+        try:
+            self._extract_process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Extract Failed", str(exc))
+            return
+
+        # UI state
         self.btn_extract.setEnabled(False)
 
         self._progress = QProgressDialog(
-            "Extracting events…", None, 0, len(self._extract_post_ids), self
+            "Extracting events…",
+            None,
+            0,
+            0,  # indeterminate; CLI is authoritative
+            self,
         )
         self._progress.setWindowModality(Qt.NonModal)
+        self._progress.setMinimumDuration(0)
         self._progress.show()
 
-        self._run_next_extract()
+        # Poll for completion only
+        self._extract_timer.start(500)
+
 
     def _run_next_extract(self) -> None:
         if not self._extract_post_ids:
@@ -288,39 +326,31 @@ class IngestWorkspace(QWidget):
         if self._extract_process.poll() is None:
             return  # still running
 
-        # process finished
-        self._extract_timer.stop()
-        self._extract_process = None
+        # Process finished
+        stdout, stderr = self._extract_process.communicate()
 
-        completed = self.ingest.count_completed_lss_runs(
-            [self._extract_post_ids[0]]
-        )
-
-        if completed:
-            self._extract_post_ids.pop(0)
-            self._progress.setValue(
-                self._progress.maximum() - len(self._extract_post_ids)
-            )
-            self._run_next_extract()
-        else:
+        if stderr:
             QMessageBox.warning(
                 self,
-                "Extraction Failed",
-                f"LSS did not complete for post {self._extract_post_ids[0]}",
+                "Extraction Warning",
+                stderr.strip(),
             )
-            self._extract_post_ids.pop(0)
-            self._run_next_extract()
 
+        self._finish_extract()
 
     def _finish_extract(self) -> None:
         self._extract_timer.stop()
+
         if self._progress:
             self._progress.close()
             self._progress = None
 
         self._extract_process = None
-        self._extract_post_ids.clear()
+        self.btn_extract.setEnabled(True)
+
+        # Refresh ingest table to show new lifecycle state
         self._load_posts()
+
 
     # ------------------------------------------------------------------
     # Posts

@@ -13,8 +13,10 @@ from sitrepc2.lss.pipeline import run_lss_pipeline
 
 def extract_callback(
     *,
-    post_id: Optional[int] = typer.Option(
-        None, help="Process a single ingest post by ID."
+    post_id: Optional[List[int]] = typer.Option(
+        None,
+        "--post-id",
+        help="Process one or more ingest posts by ID. May be specified multiple times.",
     ),
     alias: Optional[str] = typer.Option(
         None, help="Filter by human-facing alias (e.g. Rybar)."
@@ -45,19 +47,28 @@ def extract_callback(
     """Select ingested posts and execute the LSS pipeline."""
 
     # -------------------------------------------------
+    # Normalize inputs
+    # -------------------------------------------------
+
+    post_ids = post_id or []
+
+    has_post_ids = len(post_ids) > 0
+    has_other_filters = any([alias, publisher, pub_date, source])
+
+    # -------------------------------------------------
     # Validate selector logic
     # -------------------------------------------------
 
-    if post_id is not None:
-        if any([alias, publisher, pub_date, source]):
-            raise typer.BadParameter(
-                "--post-id cannot be combined with other filters."
-            )
-    else:
-        if not any([alias, publisher, pub_date, source]):
-            raise typer.BadParameter(
-                "At least one of --date, --alias, --publisher, or --source must be provided."
-            )
+    if has_post_ids and has_other_filters:
+        raise typer.BadParameter(
+            "--post-id cannot be combined with --alias, --publisher, --date, or --source."
+        )
+
+    if not has_post_ids and not has_other_filters:
+        raise typer.BadParameter(
+            "You must specify either one or more --post-id values, "
+            "or at least one of --alias, --publisher, --date, or --source."
+        )
 
     # -------------------------------------------------
     # DB helpers
@@ -86,9 +97,10 @@ def extract_callback(
     clauses: List[str] = []
     params: List[object] = []
 
-    if post_id is not None:
-        clauses.append("id = ?")
-        params.append(post_id)
+    if has_post_ids:
+        placeholders = ",".join("?" for _ in post_ids)
+        clauses.append(f"id IN ({placeholders})")
+        params.extend(post_ids)
 
     if alias is not None:
         clauses.append("alias = ?")
@@ -148,6 +160,5 @@ def extract_callback(
         reprocess=reprocess,
         keep_nonspatial=keep_nonspatial,
     )
-
 
     print("[bold green]LSS extraction complete.[/bold green]")
