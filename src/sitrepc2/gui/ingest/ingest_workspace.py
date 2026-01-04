@@ -42,10 +42,10 @@ from sitrepc2.gui.ingest.fetch_log_model import (
     FetchLogEntry,
 )
 
-from sitrepc2.lss.pipeline import (
-    run_lss_pipeline,
-    build_holmes_and_nlp,
-)
+# from sitrepc2.lss.pipeline import (
+#     run_lss_pipeline,
+#     build_holmes_and_nlp,
+# )
 
 
 # ============================================================================
@@ -53,29 +53,39 @@ from sitrepc2.lss.pipeline import (
 # ============================================================================
 
 class LSSWorker(QObject):
-    progress = Signal(int, int)   # current, total
+    progress = Signal(int, int)
     finished = Signal()
     failed = Signal(str)
 
-    def __init__(self, ingest_posts: List[dict], manager, reprocess: bool):
+    def __init__(self, ingest_posts: list[dict], reprocess: bool):
         super().__init__()
         self.ingest_posts = ingest_posts
-        self.manager = manager
         self.reprocess = reprocess
 
     def run(self):
         try:
+            # IMPORTANT: import INSIDE thread
+            from sitrepc2.lss.pipeline import (
+                run_lss_pipeline,
+                build_holmes_and_nlp,
+            )
+
+            manager = build_holmes_and_nlp()
+
             total = len(self.ingest_posts)
             for idx, post in enumerate(self.ingest_posts, start=1):
                 self.progress.emit(idx, total)
                 run_lss_pipeline(
                     ingest_posts=[post],
-                    manager=self.manager,
+                    manager=manager,
                     reprocess=self.reprocess,
                 )
+
             self.finished.emit()
+
         except Exception as exc:
             self.failed.emit(str(exc))
+
 
 
 # ============================================================================
@@ -308,9 +318,9 @@ class IngestWorkspace(QWidget):
         self._nlp_thread = QThread()
         worker = LSSWorker(
             ingest_posts=ingest_posts,
-            manager=self._nlp_manager,
             reprocess=self.chk_reprocess.isChecked(),
         )
+
         worker.moveToThread(self._nlp_thread)
 
         self._nlp_thread.started.connect(worker.run)
