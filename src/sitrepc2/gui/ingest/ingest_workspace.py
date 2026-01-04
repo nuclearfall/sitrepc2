@@ -229,20 +229,27 @@ class IngestWorkspace(QWidget):
     # ------------------------------------------------------------------
     # Extraction (subprocess-based)
     # ------------------------------------------------------------------
-
     def _extract_selected_posts(self) -> None:
         rows = self.ingest.query_posts(IngestPostFilter())
 
-        post_ids = sorted({
-            rows[item.row()].post_id
-            for item in self.table.selectedItems()
-        })
+        # Collect unique selected post IDs (row selection can duplicate)
+        post_ids = sorted(
+            {
+                rows[item.row()].post_id
+                for item in self.table.selectedItems()
+            }
+        )
 
         if not post_ids:
             return
 
+        # ------------------------------------------------------------
         # IMPORTANT:
-        # Use the sitrepc2 ENTRYPOINT, not python -m
+        # Invoke the *installed CLI entrypoint*, not `python -m sitrepc2`
+        # This guarantees the same venv + spaCy models as the shell.
+        # ------------------------------------------------------------
+        import os
+
         cmd = ["sitrepc2", "extract"]
 
         for pid in post_ids:
@@ -257,24 +264,27 @@ class IngestWorkspace(QWidget):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                env=os.environ.copy(),   # <-- critical
             )
         except Exception as exc:
             QMessageBox.critical(self, "Extract Failed", str(exc))
             return
 
+        # UI state
         self.btn_extract.setEnabled(False)
 
         self._progress = QProgressDialog(
             "Extracting events…",
             None,
             0,
-            0,
+            0,  # indeterminate; CLI is authoritative
             self,
         )
         self._progress.setWindowModality(Qt.NonModal)
         self._progress.setMinimumDuration(0)
         self._progress.show()
 
+        # Poll only for completion
         self._extract_timer.start(500)
 
 
