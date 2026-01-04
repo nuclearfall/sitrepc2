@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import subprocess
 from typing import Optional, List
 
-from PySide6.QtCore import Qt, QDate, QThread, Signal, QObject
-from PySide6.QtGui import QColor
+from PySide6.QtCore import Qt, QDate, QTimer
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -42,50 +42,6 @@ from sitrepc2.gui.ingest.fetch_log_model import (
     FetchLogEntry,
 )
 
-# from sitrepc2.lss.pipeline import (
-#     run_lss_pipeline,
-#     build_holmes_and_nlp,
-# )
-
-
-# ============================================================================
-# LSS Worker
-# ============================================================================
-class LSSWorker(QObject):
-    progress = Signal(int, int)
-    finished = Signal()
-    failed = Signal(str)
-
-    def __init__(self, ingest_posts: list[dict], reprocess: bool):
-        super().__init__()
-
-        self.ingest_posts = ingest_posts
-        self.reprocess = reprocess
-
-    def run(self):
-        try:
-            # IMPORTANT: import INSIDE thread
-            from sitrepc2.lss.pipeline import (
-                run_lss_pipeline,
-                build_holmes_and_nlp,
-            )
-
-            manager = build_holmes_and_nlp()
-
-            total = len(self.ingest_posts)
-            for idx, post in enumerate(self.ingest_posts, start=1):
-                self.progress.emit(idx, total)
-                run_lss_pipeline(
-                    ingest_posts=[post],
-                    manager=manager,
-                    reprocess=self.reprocess,
-                )
-
-            self.finished.emit()
-
-        except Exception as exc:
-            self.failed.emit(str(exc))
-
 # ============================================================================
 # Lifecycle visuals
 # ============================================================================
@@ -111,14 +67,16 @@ class IngestWorkspace(QWidget):
         self.sources = SourceController()
         self.fetch_log = FetchLogModel()
 
+        # source editor state
         self._editing_new = False
         self._loaded_source_name: Optional[str] = None
 
-        self._nlp_manager = None
-        self._nlp_thread: Optional[QThread] = None
+        # extract / subprocess state
+        self._extract_process: Optional[subprocess.Popen] = None
+        self._extract_post_ids: list[int] = []
         self._progress: Optional[QProgressDialog] = None
-        self._worker: Optional[LSSWorker] = None
-
+        self._extract_timer = QTimer(self)
+        self._extract_timer.timeout.connect(self._poll_extract_progress)
 
         self._build_ui()
         self._load_sources()
@@ -219,7 +177,7 @@ class IngestWorkspace(QWidget):
         splitter.addWidget(left)
 
         # ==============================================================
-        # Right: posts + NLP
+        # Right: posts + extract
         # ==============================================================
 
         right = QWidget()
@@ -236,15 +194,15 @@ class IngestWorkspace(QWidget):
         self.table.itemSelectionChanged.connect(self._on_post_selected)
         right_layout.addWidget(self.table)
 
-        # NLP controls
-        nlp_bar = QHBoxLayout()
+        # Extract controls
+        extract_bar = QHBoxLayout()
         self.chk_reprocess = QCheckBox("Reprocess")
         self.btn_extract = QPushButton("Extract Events")
         self.btn_extract.setEnabled(False)
-        nlp_bar.addWidget(self.chk_reprocess)
-        nlp_bar.addWidget(self.btn_extract)
-        nlp_bar.addStretch()
-        right_layout.addLayout(nlp_bar)
+        extract_bar.addWidget(self.chk_reprocess)
+        extract_bar.addWidget(self.btn_extract)
+        extract_bar.addStretch()
+        right_layout.addLayout(extract_bar)
 
         self.tabs = QTabWidget()
         self.post_detail = QTextEdit()
@@ -277,276 +235,71 @@ class IngestWorkspace(QWidget):
         self.btn_extract.clicked.connect(self._extract_selected_posts)
 
     # ------------------------------------------------------------------
-    # NLP
+    # Extraction (subprocess-based)
     # ------------------------------------------------------------------
 
-    def _selected_ingest_posts(self) -> List[dict]:
-        rows = self.ingest.query_posts(IngestPostFilter())
-        selected_rows = {i.row() for i in self.table.selectedItems()}
-
-        out = []
-        for idx in selected_rows:
-            row = rows[idx]
-            out.append(
-                {
-                    "id": row.post_id,
-                    "text": self.ingest.get_post(row.post_id).text,
-                }
-            )
-        return out
-
     def _extract_selected_posts(self) -> None:
-        ingest_posts = self._selected_ingest_posts()
-        if not ingest_posts:
+        rows = self.ingest.query_posts(IngestPostFilter())
+        post_ids = sorted(
+            {
+                rows[i.row()].post_id
+                for i in self.table.selectedItems()
+            }
+        )
+        if not post_ids:
             return
 
+        cmd = ["sitrepc2", "extract"]
+        for pid in post_ids:
+            cmd += ["--post-id", str(pid)]
+        if self.chk_reprocess.isChecked():
+            cmd.append("--reprocess")
+
+        try:
+            self._extract_process = subprocess.Popen(cmd)
+        except Exception as exc:
+            QMessageBox.critical(self, "Extract Failed", str(exc))
+            return
+
+        self._extract_post_ids = post_ids
         self.btn_extract.setEnabled(False)
 
         self._progress = QProgressDialog(
-            "Extracting events…",
-            "Cancel",
-            0,
-            len(ingest_posts),
-            self,
+            "Extracting events…", None, 0, len(post_ids), self
         )
         self._progress.setWindowModality(Qt.NonModal)
         self._progress.show()
 
-        self._nlp_thread = QThread(self)
-        self._worker = LSSWorker(
-            ingest_posts=ingest_posts,
-            reprocess=self.chk_reprocess.isChecked(),
-        )
-        self._worker.moveToThread(self._nlp_thread)
+        self._extract_timer.start(500)
 
-        # start
-        self._nlp_thread.started.connect(self._worker.run)
+    def _poll_extract_progress(self) -> None:
+        completed = self.ingest.count_completed_lss_runs(self._extract_post_ids)
+        total = len(self._extract_post_ids)
 
-        # progress
-        self._worker.progress.connect(self._on_extract_progress)
-        self._worker.finished.connect(self._on_extract_finished)
-        self._worker.failed.connect(self._on_extract_failed)
-
-        # cleanup
-        self._worker.finished.connect(self._nlp_thread.quit)
-        self._worker.failed.connect(self._nlp_thread.quit)
-        self._nlp_thread.finished.connect(self._nlp_thread.deleteLater)
-        self._worker.finished.connect(self._worker.deleteLater)
-
-        self._nlp_thread.start()
-
-
-    def _on_extract_progress(self, current: int, total: int):
         if self._progress:
             self._progress.setMaximum(total)
-            self._progress.setValue(current)
+            self._progress.setValue(completed)
 
-    def _on_extract_finished(self):
+        if completed >= total:
+            self._finish_extract()
+            return
+
+        if self._extract_process and self._extract_process.poll() is not None:
+            QMessageBox.warning(
+                self,
+                "Extraction Incomplete",
+                f"Extractor exited early ({completed}/{total} completed).",
+            )
+            self._finish_extract()
+
+    def _finish_extract(self) -> None:
+        self._extract_timer.stop()
         if self._progress:
             self._progress.close()
-        self.btn_extract.setEnabled(False)
-        self._load_posts()
+            self._progress = None
 
-    def _on_extract_failed(self, message: str):
-        if self._progress:
-            self._progress.close()
-        QMessageBox.critical(self, "NLP Extraction Failed", message)
-
-    # ------------------------------------------------------------------
-    # Sources list
-    # ------------------------------------------------------------------
-
-    def _load_sources(self) -> None:
-        self.source_list.clear()
-        for src in self.sources.load_sources():
-            label = src.alias
-            if not src.active:
-                label += " (inactive)"
-            item = QListWidgetItem(label)
-            item.setData(Qt.UserRole, src)
-            if not src.active:
-                item.setForeground(Qt.gray)
-            self.source_list.addItem(item)
-
-    def _selected_sources(self) -> List[SourceRecord]:
-        out: List[SourceRecord] = []
-        for i in self.source_list.selectedItems():
-            src = i.data(Qt.UserRole)
-            if isinstance(src, SourceRecord):
-                out.append(src)
-        return out
-
-    def _selected_source_names(self) -> List[str]:
-        return [s.source_name for s in self._selected_sources()]
-
-    def _on_source_selection_changed(self) -> None:
-        items = self._selected_sources()
-        if len(items) == 1:
-            self._load_source_into_editor(items[0])
-        else:
-            # No disabling: just clear the loaded identity so Save behaves as "New" only if user hit New.
-            self._loaded_source_name = None
-
-    # ------------------------------------------------------------------
-    # Source editor helpers
-    # ------------------------------------------------------------------
-
-    def _clear_editor_fields(self) -> None:
-        # IMPORTANT: do NOT call self.ed_kind.clear() (it would remove combo items)
-        self.ed_source_name.setText("")
-        self.ed_alias.setText("")
-        self.ed_lang.setText("")
-        self.ed_active.setChecked(True)
-        self.ed_kind.setCurrentIndex(0)
-
-        self._editing_new = False
-        self._loaded_source_name = None
-
-    def _load_source_into_editor(self, src: SourceRecord) -> None:
-        self._editing_new = False
-        self._loaded_source_name = src.source_name
-
-        self.ed_source_name.setText(src.source_name)
-        self.ed_alias.setText(src.alias)
-        self.ed_kind.setCurrentText(src.source_kind)
-        self.ed_lang.setText(src.source_lang)
-        self.ed_active.setChecked(src.active)
-
-    def _new_source(self) -> None:
-        self._editing_new = True
-        self._loaded_source_name = None
-        self._clear_editor_fields()
-        self._editing_new = True  # reassert
-
-    def _revert_source(self) -> None:
-        if not self._loaded_source_name:
-            return
-        # Reload from disk to avoid stale UI state
-        for s in self.sources.load_sources():
-            if s.source_name == self._loaded_source_name:
-                self._load_source_into_editor(s)
-                return
-
-    def _save_source(self) -> None:
-        try:
-            record = SourceRecord(
-                source_name=self.ed_source_name.text().strip(),
-                alias=self.ed_alias.text().strip(),
-                source_kind=self.ed_kind.currentText().strip(),
-                source_lang=self.ed_lang.text().strip(),
-                active=self.ed_active.isChecked(),
-            )
-
-            if not record.source_name:
-                raise ValueError("source_name is required")
-            if not record.alias:
-                raise ValueError("alias is required")
-            if not record.source_lang:
-                raise ValueError("source_lang is required")
-            if not record.source_kind:
-                raise ValueError("source_kind is required")
-
-            if self._editing_new or not self._loaded_source_name:
-                # add
-                self.sources.add_source(record)
-            else:
-                # replace (allows renaming and kind changes)
-                self.sources.replace_source(self._loaded_source_name, record)
-
-            self._load_sources()
-            self._clear_editor_fields()
-
-        except Exception as exc:
-            QMessageBox.critical(self, "Source Error", str(exc))
-
-    def _delete_source(self) -> None:
-        if not self._loaded_source_name:
-            return
-
-        if QMessageBox.question(
-            self,
-            "Delete Source",
-            "Hard delete this source from sources.jsonl?",
-        ) != QMessageBox.Yes:
-            return
-
-        try:
-            self.sources.delete_source_hard(self._loaded_source_name)
-            self._load_sources()
-            self._clear_editor_fields()
-        except Exception as exc:
-            QMessageBox.critical(self, "Delete Error", str(exc))
-
-    # ------------------------------------------------------------------
-    # Enable/Disable/Remove toolbar ops
-    # ------------------------------------------------------------------
-
-    def _set_active(self, active: bool) -> None:
-        names = self._selected_source_names()
-        if not names:
-            return
-        self.sources.set_active(names, active)
-        self._load_sources()
-
-    def _remove_sources(self) -> None:
-        # Per your new requirement, "deletes should be hard deletes" — so Remove = hard delete.
-        names = self._selected_source_names()
-        if not names:
-            return
-
-        if QMessageBox.question(
-            self,
-            "Remove Sources",
-            "Hard delete selected sources from sources.jsonl?",
-        ) != QMessageBox.Yes:
-            return
-
-        try:
-            for name in names:
-                self.sources.delete_source_hard(name)
-            self._load_sources()
-            self._clear_editor_fields()
-        except Exception as exc:
-            QMessageBox.critical(self, "Remove Error", str(exc))
-
-    # ------------------------------------------------------------------
-    # Fetching
-    # ------------------------------------------------------------------
-
-    def _fetch_selected(self) -> None:
-        names = self._selected_source_names()
-        if not names:
-            QMessageBox.information(self, "Fetch", "No sources selected.")
-            return
-        self._fetch(names)
-
-    def _fetch_all(self) -> None:
-        names = [s.source_name for s in self.sources.load_sources() if s.active]
-        self._fetch(names)
-
-    def _fetch(self, source_names: List[str]) -> None:
-        results = self.sources.fetch_sources(
-            source_names=source_names,
-            start_date=self.fetch_from.date().toString("yyyy-MM-dd"),
-            end_date=self.fetch_to.date().toString("yyyy-MM-dd"),
-            force=self.force_check.isChecked(),
-        )
-
-        for r in results:
-            self.fetch_log.add(
-                FetchLogEntry(
-                    timestamp=r.timestamp,
-                    source_name=r.source_name,
-                    source_kind=r.source_kind,
-                    start_date=r.start_date,
-                    end_date=r.end_date,
-                    force=r.force,
-                    fetched_count=r.fetched_count,
-                    error=r.error,
-                )
-            )
-
-        self._refresh_fetch_log()
+        self._extract_process = None
+        self._extract_post_ids.clear()
         self._load_posts()
 
     # ------------------------------------------------------------------
@@ -577,9 +330,6 @@ class IngestWorkspace(QWidget):
             QTableWidgetItem(row.text_snippet),
         ]
 
-        # bg_hex = STATE_COLOR.get(row.state)
-        # bg = QColor(bg_hex) if bg_hex else None
-
         for c, item in enumerate(items):
             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
             self.table.setItem(row_idx, c, item)
@@ -591,14 +341,174 @@ class IngestWorkspace(QWidget):
             self.post_detail.clear()
             return
 
-        # Enable Extract Events when there is a selection
         self.btn_extract.setEnabled(True)
 
+        rows = self.ingest.query_posts(IngestPostFilter())
         row_idx = items[0].row()
-        post_id = self.ingest.query_posts(IngestPostFilter())[row_idx].post_id
+        post_id = rows[row_idx].post_id
         detail = self.ingest.get_post(post_id)
         self.post_detail.setPlainText(detail.text)
 
+    # ------------------------------------------------------------------
+    # Sources list + editor
+    # ------------------------------------------------------------------
+
+    def _load_sources(self) -> None:
+        self.source_list.clear()
+        for src in self.sources.load_sources():
+            label = src.alias
+            if not src.active:
+                label += " (inactive)"
+            item = QListWidgetItem(label)
+            item.setData(Qt.UserRole, src)
+            if not src.active:
+                item.setForeground(Qt.gray)
+            self.source_list.addItem(item)
+
+    def _selected_sources(self) -> List[SourceRecord]:
+        return [
+            i.data(Qt.UserRole)
+            for i in self.source_list.selectedItems()
+            if isinstance(i.data(Qt.UserRole), SourceRecord)
+        ]
+
+    def _selected_source_names(self) -> List[str]:
+        return [s.source_name for s in self._selected_sources()]
+
+    def _on_source_selection_changed(self) -> None:
+        items = self._selected_sources()
+        if len(items) == 1:
+            self._load_source_into_editor(items[0])
+        else:
+            self._loaded_source_name = None
+
+    def _clear_editor_fields(self) -> None:
+        self.ed_source_name.setText("")
+        self.ed_alias.setText("")
+        self.ed_lang.setText("")
+        self.ed_active.setChecked(True)
+        self.ed_kind.setCurrentIndex(0)
+        self._editing_new = False
+        self._loaded_source_name = None
+
+    def _load_source_into_editor(self, src: SourceRecord) -> None:
+        self._editing_new = False
+        self._loaded_source_name = src.source_name
+        self.ed_source_name.setText(src.source_name)
+        self.ed_alias.setText(src.alias)
+        self.ed_kind.setCurrentText(src.source_kind)
+        self.ed_lang.setText(src.source_lang)
+        self.ed_active.setChecked(src.active)
+
+    def _new_source(self) -> None:
+        self._editing_new = True
+        self._loaded_source_name = None
+        self._clear_editor_fields()
+        self._editing_new = True
+
+    def _revert_source(self) -> None:
+        if not self._loaded_source_name:
+            return
+        for s in self.sources.load_sources():
+            if s.source_name == self._loaded_source_name:
+                self._load_source_into_editor(s)
+                return
+
+    def _save_source(self) -> None:
+        try:
+            record = SourceRecord(
+                source_name=self.ed_source_name.text().strip(),
+                alias=self.ed_alias.text().strip(),
+                source_kind=self.ed_kind.currentText().strip(),
+                source_lang=self.ed_lang.text().strip(),
+                active=self.ed_active.isChecked(),
+            )
+            if self._editing_new or not self._loaded_source_name:
+                self.sources.add_source(record)
+            else:
+                self.sources.replace_source(self._loaded_source_name, record)
+
+            self._load_sources()
+            self._clear_editor_fields()
+
+        except Exception as exc:
+            QMessageBox.critical(self, "Source Error", str(exc))
+
+    def _delete_source(self) -> None:
+        if not self._loaded_source_name:
+            return
+        if QMessageBox.question(
+            self, "Delete Source", "Hard delete this source?"
+        ) != QMessageBox.Yes:
+            return
+        try:
+            self.sources.delete_source_hard(self._loaded_source_name)
+            self._load_sources()
+            self._clear_editor_fields()
+        except Exception as exc:
+            QMessageBox.critical(self, "Delete Error", str(exc))
+
+    # ------------------------------------------------------------------
+    # Enable / Disable / Remove toolbar ops
+    # ------------------------------------------------------------------
+
+    def _set_active(self, active: bool) -> None:
+        names = self._selected_source_names()
+        if names:
+            self.sources.set_active(names, active)
+            self._load_sources()
+
+    def _remove_sources(self) -> None:
+        names = self._selected_source_names()
+        if not names:
+            return
+        if QMessageBox.question(
+            self, "Remove Sources", "Hard delete selected sources?"
+        ) != QMessageBox.Yes:
+            return
+        try:
+            for n in names:
+                self.sources.delete_source_hard(n)
+            self._load_sources()
+            self._clear_editor_fields()
+        except Exception as exc:
+            QMessageBox.critical(self, "Remove Error", str(exc))
+
+    # ------------------------------------------------------------------
+    # Fetching
+    # ------------------------------------------------------------------
+
+    def _fetch_selected(self) -> None:
+        names = self._selected_source_names()
+        if names:
+            self._fetch(names)
+
+    def _fetch_all(self) -> None:
+        names = [s.source_name for s in self.sources.load_sources() if s.active]
+        self._fetch(names)
+
+    def _fetch(self, source_names: List[str]) -> None:
+        results = self.sources.fetch_sources(
+            source_names=source_names,
+            start_date=self.fetch_from.date().toString("yyyy-MM-dd"),
+            end_date=self.fetch_to.date().toString("yyyy-MM-dd"),
+            force=self.force_check.isChecked(),
+        )
+        for r in results:
+            self.fetch_log.add(
+                FetchLogEntry(
+                    timestamp=r.timestamp,
+                    source_name=r.source_name,
+                    source_kind=r.source_kind,
+                    start_date=r.start_date,
+                    end_date=r.end_date,
+                    force=r.force,
+                    fetched_count=r.fetched_count,
+                    error=r.error,
+                )
+            )
+        self._refresh_fetch_log()
+        self._load_posts()
 
     def _refresh_fetch_log(self) -> None:
         lines = []
