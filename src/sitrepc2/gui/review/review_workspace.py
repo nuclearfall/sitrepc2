@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Dict
+from typing import Dict, Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -15,15 +15,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
 )
 
-from sitrepc2.gui.ingest.controller import (
-    IngestController,
-    IngestPostFilter,
-    IngestPostState,
-)
-
 from sitrepc2.gui.review.controller import ReviewController
-from sitrepc2.dom.nodes import DomNode   # ✅ FIXED
-from sitrepc2.config.paths import records_path
 
 
 # ============================================================================
@@ -32,26 +24,19 @@ from sitrepc2.config.paths import records_path
 
 class ReviewWorkspace(QWidget):
     """
-    UI workspace for DOM review.
-
-    Pure UI responsibilities:
-    - Display READY_FOR_REVIEW posts
-    - Display DOM tree for selected post
-    - Reflect and update node selection state
+    DOM-backed review workspace.
     """
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
 
-        self.ingest = IngestController()
-        self.review = ReviewController(str(records_path()))
+        self.review = ReviewController()
 
         self._current_snapshot_id: Optional[int] = None
-        self._dom_nodes: Dict[str, DomNode] = {}
+        self._nodes_by_id: Dict[int, QTreeWidgetItem] = {}
 
         self._build_ui()
-        self._load_posts()
-
+        self._load_runs()
 
     # ------------------------------------------------------------------
     # UI
@@ -59,33 +44,33 @@ class ReviewWorkspace(QWidget):
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.addWidget(QLabel("Review Extracted Posts"))
+        root.addWidget(QLabel("DOM Review"))
 
         splitter = QSplitter(Qt.Horizontal)
 
-        # --------------------------------------------------------------
-        # Left: Post list
-        # --------------------------------------------------------------
+        # --------------------------------------------------
+        # Runs table
+        # --------------------------------------------------
 
         self.table = QTableWidget()
-        self.table.setColumnCount(5)
+        self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(
-            ["Published", "Alias", "Source", "Events", "Snippet"]
+            ["Ingest Post", "LSS Run", "Events", "Started"]
         )
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
-        self.table.itemSelectionChanged.connect(self._on_post_selected)
+        self.table.itemSelectionChanged.connect(self._on_run_selected)
 
         splitter.addWidget(self.table)
 
-        # --------------------------------------------------------------
-        # Right: DOM tree
-        # --------------------------------------------------------------
+        # --------------------------------------------------
+        # DOM tree
+        # --------------------------------------------------
 
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(["Node", "Type"])
-        self.tree.itemChanged.connect(self._on_item_check_changed)
+        self.tree.itemChanged.connect(self._on_item_changed)
 
         splitter.addWidget(self.tree)
         splitter.setStretchFactor(1, 3)
@@ -93,99 +78,85 @@ class ReviewWorkspace(QWidget):
         root.addWidget(splitter)
 
     # ------------------------------------------------------------------
-    # Post loading
+    # Runs
     # ------------------------------------------------------------------
 
-    def _load_posts(self) -> None:
-        rows = self.ingest.query_posts(
-            IngestPostFilter(state=IngestPostState.READY_FOR_REVIEW)
-        )
+    def _load_runs(self) -> None:
+        runs = self.review.list_reviewable_runs()
 
-        self.table.setRowCount(len(rows))
+        self.table.setRowCount(len(runs))
 
-        for r, row in enumerate(rows):
-            items = [
-                QTableWidgetItem(row.published_at),
-                QTableWidgetItem(row.alias),
-                QTableWidgetItem(row.source),
-                QTableWidgetItem(str(row.event_count)),
-                QTableWidgetItem(row.text_snippet),
-            ]
-            for c, item in enumerate(items):
-                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-                self.table.setItem(r, c, item)
+        for r, row in enumerate(runs):
+            self.table.setItem(r, 0, QTableWidgetItem(str(row["ingest_post_id"])))
+            self.table.setItem(r, 1, QTableWidgetItem(str(row["lss_run_id"])))
+            self.table.setItem(r, 2, QTableWidgetItem(str(row["event_count"])))
+            self.table.setItem(r, 3, QTableWidgetItem(row["started_at"]))
 
         self.table.resizeColumnsToContents()
 
     # ------------------------------------------------------------------
-    # Post selection
+    # Run selection
     # ------------------------------------------------------------------
 
-    def _on_post_selected(self) -> None:
+    def _on_run_selected(self) -> None:
         items = self.table.selectedItems()
         if not items:
             return
 
-        row_idx = items[0].row()
-        rows = self.ingest.query_posts(
-            IngestPostFilter(state=IngestPostState.READY_FOR_REVIEW)
-        )
+        row = items[0].row()
 
-        post_id = rows[row_idx].post_id
-        lss_run_id = self.ingest.get_latest_lss_run_id(post_id)
-        if not lss_run_id:
-            return
+        ingest_post_id = int(self.table.item(row, 0).text())
+        lss_run_id = int(self.table.item(row, 1).text())
 
-        snapshot_id, nodes = self.review.enter_initial_review(
-            ingest_post_id=post_id,
+        snapshot_id = self.review.enter_initial_review(
+            ingest_post_id=ingest_post_id,
             lss_run_id=lss_run_id,
         )
 
         self._current_snapshot_id = snapshot_id
-        self._dom_nodes = nodes
-
-        self._rebuild_dom_tree()
+        self._load_dom_tree()
 
     # ------------------------------------------------------------------
-    # DOM tree rendering
+    # Tree
     # ------------------------------------------------------------------
 
-    def _rebuild_dom_tree(self) -> None:
+    def _load_dom_tree(self) -> None:
         self.tree.blockSignals(True)
         self.tree.clear()
+        self._nodes_by_id.clear()
 
-        post_node = next(
-            n for n in self._dom_nodes.values()
-            if n.node_id.startswith("post:")
+        rows = self.review.load_dom_tree(
+            dom_snapshot_id=self._current_snapshot_id
         )
 
-        root_item = self._build_tree_item(post_node)
-        self.tree.addTopLevelItem(root_item)
-        root_item.setExpanded(True)
+        # First pass: create items
+        for row in rows:
+            item = QTreeWidgetItem([row["summary"], row["node_type"]])
+            item.setData(0, Qt.UserRole, row["node_id"])
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(
+                0, Qt.Checked if row["selected"] else Qt.Unchecked
+            )
+            self._nodes_by_id[row["node_id"]] = item
+
+        # Second pass: parent/child wiring
+        for row in rows:
+            item = self._nodes_by_id[row["node_id"]]
+            parent_id = row["parent_id"]
+
+            if parent_id is None:
+                self.tree.addTopLevelItem(item)
+                item.setExpanded(True)
+            else:
+                self._nodes_by_id[parent_id].addChild(item)
 
         self.tree.blockSignals(False)
 
-    def _build_tree_item(self, node: DomNode) -> QTreeWidgetItem:   # ✅ FIXED
-        selected = self.review.get_node_selection(
-            dom_snapshot_id=self._current_snapshot_id,
-            dom_node_id=node.node_id,
-        )
-
-        item = QTreeWidgetItem([node.summary, node.__class__.__name__])
-        item.setData(0, Qt.UserRole, node.node_id)
-        item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-        item.setCheckState(0, Qt.Checked if selected else Qt.Unchecked)
-
-        for child in node.children:
-            item.addChild(self._build_tree_item(child))
-
-        return item
-
     # ------------------------------------------------------------------
-    # Selection propagation
+    # Selection
     # ------------------------------------------------------------------
 
-    def _on_item_check_changed(
+    def _on_item_changed(
         self,
         item: QTreeWidgetItem,
         column: int,
@@ -194,65 +165,10 @@ class ReviewWorkspace(QWidget):
             return
 
         node_id = item.data(0, Qt.UserRole)
-        checked = item.checkState(0) == Qt.Checked
+        selected = item.checkState(0) == Qt.Checked
 
         self.review.set_node_selected(
             dom_snapshot_id=self._current_snapshot_id,
             dom_node_id=node_id,
-            selected=checked,
-        )
-
-        self._propagate_to_children(item, checked)
-        self._update_parent_state(item.parent())
-
-    def _propagate_to_children(
-        self,
-        item: QTreeWidgetItem,
-        selected: bool,
-    ) -> None:
-        for i in range(item.childCount()):
-            child = item.child(i)
-            child.setCheckState(0, Qt.Checked if selected else Qt.Unchecked)
-
-            self.review.set_node_selected(
-                dom_snapshot_id=self._current_snapshot_id,
-                dom_node_id=child.data(0, Qt.UserRole),
-                selected=selected,
-            )
-
-            self._propagate_to_children(child, selected)
-
-    def _update_parent_state(
-        self,
-        parent: Optional[QTreeWidgetItem],
-    ) -> None:
-        if not parent:
-            return
-
-        checked = 0
-        unchecked = 0
-
-        for i in range(parent.childCount()):
-            state = parent.child(i).checkState(0)
-            if state == Qt.Checked:
-                checked += 1
-            elif state == Qt.Unchecked:
-                unchecked += 1
-
-        if checked == parent.childCount():
-            parent.setCheckState(0, Qt.Checked)
-            selected = True
-        elif unchecked == parent.childCount():
-            parent.setCheckState(0, Qt.Unchecked)
-            selected = False
-        else:
-            parent.setCheckState(0, Qt.PartiallyChecked)
-            selected = False
-
-        self.review.set_node_selected(
-            dom_snapshot_id=self._current_snapshot_id,
-            dom_node_id=parent.data(0, Qt.UserRole),
             selected=selected,
         )
-
-        self._update_parent_state(parent.parent())
