@@ -7,6 +7,7 @@ import sqlite3
 
 from sitrepc2.dom.dom_builder import build_dom_skeleton
 from sitrepc2.dom.nodes import DomNode   # ✅ FIXED
+from sitrepc2.config.paths import records_path as records_db_path
 
 
 # ============================================================================
@@ -26,8 +27,8 @@ class ReviewController:
 
     INITIAL_REVIEW_STAGE_ID = 2
 
-    def __init__(self, records_db_path: str) -> None:
-        self.records_db_path = records_db_path
+    def __init__(self, records_path: str = records_db_path()) -> None:
+        self.records_db_path = records_path
 
     # ------------------------------------------------------------------
     # Lifecycle entry
