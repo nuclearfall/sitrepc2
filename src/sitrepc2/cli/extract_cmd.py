@@ -97,11 +97,13 @@ def extract_callback(
     clauses: List[str] = []
     params: List[object] = []
 
+    # ---- Post IDs (supports multiple --post-id) ----
     if has_post_ids:
         placeholders = ",".join("?" for _ in post_ids)
         clauses.append(f"id IN ({placeholders})")
         params.extend(post_ids)
 
+    # ---- Other filters (mutually exclusive w/ post-id enforced earlier) ----
     if alias is not None:
         clauses.append("alias = ?")
         params.append(alias)
@@ -119,18 +121,24 @@ def extract_callback(
         clauses.append("published_at BETWEEN ? AND ?")
         params.extend([start, end])
 
+    # ---- Assemble SQL ----
     where_sql = " AND ".join(clauses)
 
-    sql = f"""
+    sql = """
         SELECT id, text
         FROM ingest_posts
-        WHERE {where_sql}
-        ORDER BY published_at ASC
     """
 
+    if where_sql:
+        sql += f" WHERE {where_sql}"
+
+    sql += " ORDER BY published_at ASC"
+
+    # ---- LIMIT ----
     if limit is not None:
         sql += " LIMIT ?"
         params.append(limit)
+
 
     # -------------------------------------------------
     # Fetch posts
