@@ -61,15 +61,19 @@ class DomNode:
     - Selection excludes node and all descendants
     """
 
+    # -------- NON-DEFAULT (MUST COME FIRST) --------
+
     node_id: int
     summary: str
 
-    selected: bool = True
+    # -------- DEFAULTS (SAFE FOR INHERITANCE) ------
 
+    selected: bool = True
     parent: Optional["DomNode"] = None
     children: List["DomNode"] = field(default_factory=list)
-
     contexts: List[Context] = field(default_factory=list)
+
+    # ------------------------------------------------
 
     def add_child(self, child: "DomNode") -> None:
         child.parent = self
@@ -159,17 +163,20 @@ class LocationCandidateNode(DomNode):
     - Does not embed derived relationships
     """
 
-    # Provenance
+    # -------- Provenance --------
+
     gazetteer_location_id: Optional[int]
 
-    # Snapshot of canonical gazetteer.location attributes
+    # -------- Embedded gazetteer snapshot --------
+
     lat: Optional[float]
     lon: Optional[float]
     name: Optional[str]
     place: Optional[str]
     wikidata: Optional[str]
 
-    # Review metadata
+    # -------- Review metadata --------
+
     confidence: Optional[float]
     persists: bool
     dist_from_front: float
