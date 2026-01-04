@@ -298,11 +298,11 @@ class IngestWorkspace(QWidget):
         self._editing_new = False
 
         self.ed_source_name.setText(src.source_name)
-        self.ed_source_name.setEnabled(False)
+        # self.ed_source_name.setEnabled(False)
 
         self.ed_alias.setText(src.alias)
         self.ed_kind.setCurrentText(src.source_kind)
-        self.ed_kind.setEnabled(False)
+        #self.ed_kind.setEnabled(False)
         self.ed_lang.setText(src.source_lang)
         self.ed_active.setChecked(src.active)
 
