@@ -10,6 +10,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QPushButton,
+    QToolBar,
+    QAction
 )
 
 from sitrepc2.gui.ingest.ingest_workspace import IngestWorkspace
@@ -46,45 +48,8 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        central = QWidget(self)
-        layout = QVBoxLayout(central)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-
-        # --------------------------------------------------
-        # Workspace switcher
-        # --------------------------------------------------
-
-        switcher = QHBoxLayout()
-        switcher.setContentsMargins(8, 6, 8, 6)
-
-        self.btn_ingest = QPushButton("Ingest")
-        self.btn_review = QPushButton("Review")
-
-        for btn in (self.btn_ingest, self.btn_review):
-            btn.setCheckable(True)
-            btn.setFlat(True)
-
-        self.btn_ingest.setChecked(True)
-
-        switcher.addWidget(self.btn_ingest)
-        switcher.addWidget(self.btn_review)
-        switcher.addStretch()
-
-        layout.addLayout(switcher)
-
-        # --------------------------------------------------
-        # Workspace stack
-        # --------------------------------------------------
-
         self.workspace_stack = QStackedWidget()
-        layout.addWidget(self.workspace_stack)
-
-        self.setCentralWidget(central)
-
-        # --------------------------------------------------
-        # Workspaces
-        # --------------------------------------------------
+        self.setCentralWidget(self.workspace_stack)
 
         self.ingest_workspace = IngestWorkspace(self)
         self.review_workspace = ReviewWorkspace(self)
@@ -92,8 +57,30 @@ class MainWindow(QMainWindow):
         self.workspace_stack.addWidget(self.ingest_workspace)
         self.workspace_stack.addWidget(self.review_workspace)
 
+        self._build_workspace_toolbar()
+
         self.workspace_stack.setCurrentWidget(self.ingest_workspace)
 
+
+    def _build_workspace_toolbar(self) -> None:
+        toolbar = QToolBar("Workspaces", self)
+        toolbar.setMovable(False)
+        self.addToolBar(toolbar)
+
+        self.action_ingest = QAction("Ingest", self)
+        self.action_ingest.setCheckable(True)
+
+        self.action_review = QAction("Review", self)
+        self.action_review.setCheckable(True)
+
+        toolbar.addAction(self.action_ingest)
+        toolbar.addAction(self.action_review)
+
+        # Default
+        self.action_ingest.setChecked(True)
+
+        self.action_ingest.triggered.connect(self.show_ingest)
+        self.action_review.triggered.connect(self.show_review)
 
     # ------------------------------------------------------------------
     # Wiring
@@ -107,17 +94,12 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Navigation
     # ------------------------------------------------------------------
-
     def show_ingest(self) -> None:
-        self.btn_ingest.setChecked(True)
-        self.btn_review.setChecked(False)
         self.workspace_stack.setCurrentWidget(self.ingest_workspace)
+        self.action_ingest.setChecked(True)
+        self.action_review.setChecked(False)
 
     def show_review(self) -> None:
-        self.btn_ingest.setChecked(False)
-        self.btn_review.setChecked(True)
-
-        # refresh review data every time
-        self.review_workspace._load_posts()
-
         self.workspace_stack.setCurrentWidget(self.review_workspace)
+        self.action_ingest.setChecked(False)
+        self.action_review.setChecked(True)

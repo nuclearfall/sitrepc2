@@ -1,38 +1,73 @@
 from __future__ import annotations
 
-from typing import Dict, Optional
-from datetime import datetime
-
 import sqlite3
+from datetime import datetime
+from typing import Dict, List, Optional
 
-from sitrepc2.dom.dom_builder import build_dom_skeleton
-from sitrepc2.dom.nodes import DomNode   # ✅ FIXED
 from sitrepc2.config.paths import records_path
-
+from sitrepc2.dom.dom_ingest import dom_ingest
 
 
 # ============================================================================
-# Review Controller
+# Review Controller (DOM-backed, authoritative)
 # ============================================================================
 
 class ReviewController:
     """
-    Controller for DOM review lifecycle and persistence.
+    Controller for DOM-backed review.
 
-    Owns:
-    - dom_post
-    - dom_snapshot
-    - dom_node (immutable)
-    - dom_node_state (snapshot-scoped)
+    Authoritative sources:
+    - lss_runs        (what exists)
+    - dom_* tables    (what is reviewed)
     """
 
     INITIAL_REVIEW_STAGE_ID = 2
 
-    def __init__(self, records_path: str = records_path()) -> None:
-        self.records_db_path = records_path
+    def __init__(self) -> None:
+        self.db_path = records_path()
 
     # ------------------------------------------------------------------
-    # Lifecycle entry
+    # Reviewable runs
+    # ------------------------------------------------------------------
+
+    def list_reviewable_runs(self) -> List[dict]:
+        """
+        LSS runs that either:
+        - have no DOM yet
+        - OR have no INITIAL_REVIEW snapshot
+        """
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+
+        rows = conn.execute(
+            """
+            SELECT
+                r.id              AS lss_run_id,
+                r.ingest_post_id,
+                r.started_at,
+                r.completed_at,
+                COUNT(e.id)       AS event_count
+            FROM lss_runs r
+            LEFT JOIN lss_events e
+                ON e.lss_run_id = r.id
+            LEFT JOIN dom_post dp
+                ON dp.ingest_post_id = r.ingest_post_id
+               AND dp.lss_run_id     = r.id
+            LEFT JOIN dom_snapshot ds
+                ON ds.dom_post_id = dp.id
+               AND ds.lifecycle_stage_id = ?
+            WHERE ds.id IS NULL
+            GROUP BY r.id
+            ORDER BY r.started_at DESC, r.id DESC
+            """,
+            (self.INITIAL_REVIEW_STAGE_ID,),
+        ).fetchall()
+
+        conn.close()
+        return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Snapshot entry
     # ------------------------------------------------------------------
 
     def enter_initial_review(
@@ -40,175 +75,122 @@ class ReviewController:
         *,
         ingest_post_id: int,
         lss_run_id: int,
-    ) -> tuple[int, Dict[str, DomNode]]:   # ✅ FIXED
+    ) -> int:
         """
-        Ensure INITIAL_REVIEW snapshot exists and DOM structure is materialized.
+        Ensure DOM exists and INITIAL_REVIEW snapshot exists.
 
         Returns:
-            (dom_snapshot_id, dom_nodes_by_node_id)
+            dom_snapshot_id
         """
-        conn = sqlite3.connect(self.records_db_path)
+        conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
 
         with conn:
-            dom_post_id = self._ensure_dom_post(
-                conn,
-                ingest_post_id,
-                lss_run_id,
-            )
+            # dom_post
+            row = conn.execute(
+                """
+                SELECT id FROM dom_post
+                WHERE ingest_post_id = ? AND lss_run_id = ?
+                """,
+                (ingest_post_id, lss_run_id),
+            ).fetchone()
 
-            dom_snapshot_id = self._ensure_snapshot(
-                conn,
-                dom_post_id,
-            )
+            if row is None:
+                # No DOM yet → ingest
+                dom_ingest(
+                    conn=conn,
+                    ingest_post_id=ingest_post_id,
+                    lss_run_id=lss_run_id,
+                    created_at=datetime.utcnow(),
+                )
 
-            dom_nodes = self._ensure_dom_nodes(
-                conn,
-                dom_post_id,
-                dom_snapshot_id,
-                ingest_post_id,
-                lss_run_id,
+                row = conn.execute(
+                    """
+                    SELECT id FROM dom_post
+                    WHERE ingest_post_id = ? AND lss_run_id = ?
+                    """,
+                    (ingest_post_id, lss_run_id),
+                ).fetchone()
+
+            dom_post_id = row["id"]
+
+            # snapshot
+            row = conn.execute(
+                """
+                SELECT id FROM dom_snapshot
+                WHERE dom_post_id = ? AND lifecycle_stage_id = ?
+                """,
+                (dom_post_id, self.INITIAL_REVIEW_STAGE_ID),
+            ).fetchone()
+
+            if row:
+                return row["id"]
+
+            cur = conn.execute(
+                """
+                INSERT INTO dom_snapshot (
+                    dom_post_id,
+                    lifecycle_stage_id,
+                    created_at
+                )
+                VALUES (?, ?, ?)
+                """,
+                (
+                    dom_post_id,
+                    self.INITIAL_REVIEW_STAGE_ID,
+                    datetime.utcnow().isoformat(),
+                ),
             )
+            return cur.lastrowid
+
+    # ------------------------------------------------------------------
+    # DOM tree loading
+    # ------------------------------------------------------------------
+
+    def load_dom_tree(
+        self,
+        *,
+        dom_snapshot_id: int,
+    ) -> List[dict]:
+        """
+        Returns DOM nodes with state, ordered for tree reconstruction.
+        """
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+
+        rows = conn.execute(
+            """
+            SELECT
+                n.id            AS node_id,
+                n.parent_id,
+                n.node_type,
+                n.sibling_order,
+                s.selected,
+                s.summary
+            FROM dom_node n
+            JOIN dom_node_state s
+              ON s.dom_node_id = n.id
+            WHERE s.dom_snapshot_id = ?
+            ORDER BY n.parent_id, n.sibling_order
+            """,
+            (dom_snapshot_id,),
+        ).fetchall()
 
         conn.close()
-        return dom_snapshot_id, dom_nodes
+        return [dict(r) for r in rows]
 
     # ------------------------------------------------------------------
-    # dom_post / snapshot
-    # ------------------------------------------------------------------
-
-    def _ensure_dom_post(
-        self,
-        conn: sqlite3.Connection,
-        ingest_post_id: int,
-        lss_run_id: int,
-    ) -> int:
-        row = conn.execute(
-            """
-            SELECT id FROM dom_post
-            WHERE ingest_post_id = ? AND lss_run_id = ?
-            """,
-            (ingest_post_id, lss_run_id),
-        ).fetchone()
-
-        if row:
-            return row["id"]
-
-        cur = conn.execute(
-            """
-            INSERT INTO dom_post (ingest_post_id, lss_run_id)
-            VALUES (?, ?)
-            """,
-            (ingest_post_id, lss_run_id),
-        )
-        return cur.lastrowid
-
-    def _ensure_snapshot(
-        self,
-        conn: sqlite3.Connection,
-        dom_post_id: int,
-    ) -> int:
-        row = conn.execute(
-            """
-            SELECT id FROM dom_snapshot
-            WHERE dom_post_id = ? AND lifecycle_stage_id = ?
-            """,
-            (dom_post_id, self.INITIAL_REVIEW_STAGE_ID),
-        ).fetchone()
-
-        if row:
-            return row["id"]
-
-        cur = conn.execute(
-            """
-            INSERT INTO dom_snapshot (
-                dom_post_id,
-                lifecycle_stage_id,
-                created_at
-            )
-            VALUES (?, ?, ?)
-            """,
-            (
-                dom_post_id,
-                self.INITIAL_REVIEW_STAGE_ID,
-                datetime.utcnow().isoformat(),
-            ),
-        )
-        return cur.lastrowid
-
-    # ------------------------------------------------------------------
-    # DOM materialization
-    # ------------------------------------------------------------------
-
-    def _ensure_dom_nodes(
-        self,
-        conn: sqlite3.Connection,
-        dom_post_id: int,
-        dom_snapshot_id: int,
-        ingest_post_id: int,
-        lss_run_id: int,
-    ) -> Dict[str, DomNode]:   # ✅ FIXED
-        """
-        Build DOM skeleton from LSS and persist immutable structure.
-        """
-        nodes = build_dom_skeleton(
-            conn,
-            ingest_post_id=ingest_post_id,
-            lss_run_id=lss_run_id,
-        )
-
-        for node in nodes.values():
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO dom_node (
-                    id,
-                    dom_post_id,
-                    node_type,
-                    parent_id,
-                    sibling_order
-                )
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    node.node_id,
-                    dom_post_id,
-                    node.node_type,
-                    node.parent.node_id if node.parent else None,
-                    node.sibling_order,
-                ),
-            )
-
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO dom_node_state (
-                    dom_snapshot_id,
-                    dom_node_id,
-                    selected,
-                    summary
-                )
-                VALUES (?, ?, 1, ?)
-                """,
-                (
-                    dom_snapshot_id,
-                    node.node_id,
-                    node.summary,
-                ),
-            )
-
-        return nodes
-
-    # ------------------------------------------------------------------
-    # Selection updates
+    # Selection
     # ------------------------------------------------------------------
 
     def set_node_selected(
         self,
         *,
         dom_snapshot_id: int,
-        dom_node_id: str,
+        dom_node_id: int,
         selected: bool,
     ) -> None:
-        conn = sqlite3.connect(self.records_db_path)
+        conn = sqlite3.connect(self.db_path)
         with conn:
             conn.execute(
                 """
@@ -219,20 +201,3 @@ class ReviewController:
                 (int(selected), dom_snapshot_id, dom_node_id),
             )
         conn.close()
-
-    def get_node_selection(
-        self,
-        *,
-        dom_snapshot_id: int,
-        dom_node_id: str,
-    ) -> bool:
-        conn = sqlite3.connect(self.records_db_path)
-        row = conn.execute(
-            """
-            SELECT selected FROM dom_node_state
-            WHERE dom_snapshot_id = ? AND dom_node_id = ?
-            """,
-            (dom_snapshot_id, dom_node_id),
-        ).fetchone()
-        conn.close()
-        return bool(row["selected"]) if row else False
