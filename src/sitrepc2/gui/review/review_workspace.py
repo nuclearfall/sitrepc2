@@ -23,6 +23,7 @@ from sitrepc2.gui.ingest.controller import (
 
 from sitrepc2.gui.review.controller import ReviewController
 from sitrepc2.dom.nodes import DomNode   # ✅ FIXED
+from sitrepc2.config.paths import records_path
 
 
 # ============================================================================
@@ -43,13 +44,14 @@ class ReviewWorkspace(QWidget):
         super().__init__(parent)
 
         self.ingest = IngestController()
-        self.review = ReviewController(self.ingest.records_db_path)
+        self.review = ReviewController(str(records_path()))
 
         self._current_snapshot_id: Optional[int] = None
-        self._dom_nodes: Dict[str, DomNode] = {}   # ✅ FIXED
+        self._dom_nodes: Dict[str, DomNode] = {}
 
         self._build_ui()
         self._load_posts()
+
 
     # ------------------------------------------------------------------
     # UI
