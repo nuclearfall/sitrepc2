@@ -4,7 +4,6 @@ import json
 import importlib
 from dataclasses import dataclass, replace
 from datetime import datetime
-from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 from sitrepc2.config.paths import sources_path
@@ -16,7 +15,7 @@ from sitrepc2.config.paths import sources_path
 
 @dataclass(frozen=True, slots=True)
 class SourceRecord:
-    source_name: str          # canonical identifier (immutable)
+    source_name: str          # canonical identifier
     alias: str                # human-facing label
     source_kind: str          # TELEGRAM / FACEBOOK / TWITTER / HTTP
     source_lang: str          # expected language
@@ -62,13 +61,11 @@ class SourceController:
             return []
 
         records: List[SourceRecord] = []
-
         with path.open("r", encoding="utf-8") as fh:
             for line in fh:
                 line = line.strip()
                 if not line:
                     continue
-
                 data = json.loads(line)
                 records.append(
                     SourceRecord(
@@ -79,7 +76,6 @@ class SourceController:
                         active=bool(data.get("active", True)),
                     )
                 )
-
         return records
 
     # ------------------------------------------------------------------
@@ -115,18 +111,17 @@ class SourceController:
 
     def add_source(self, record: SourceRecord) -> None:
         sources = self.load_sources()
-
         if any(s.source_name == record.source_name for s in sources):
-            raise ValueError(
-                f"Source '{record.source_name}' already exists"
-            )
-
+            raise ValueError(f"Source '{record.source_name}' already exists")
         sources.append(record)
         self.save_sources(sources)
 
     # ------------------------------------------------------------------
 
     def update_source(self, source_name: str, **changes: Any) -> None:
+        """
+        Update fields on an existing source (does NOT change source_name).
+        """
         sources = self.load_sources()
         updated: List[SourceRecord] = []
         found = False
@@ -145,12 +140,43 @@ class SourceController:
 
     # ------------------------------------------------------------------
 
+    def replace_source(self, old_source_name: str, new_record: SourceRecord) -> None:
+        """
+        Replace an existing source record entirely, allowing source_name changes.
+
+        Rules:
+        - old_source_name must exist
+        - if new_record.source_name differs, it must be unique
+        """
+        sources = self.load_sources()
+
+        if not any(s.source_name == old_source_name for s in sources):
+            raise KeyError(f"Source '{old_source_name}' not found")
+
+        if new_record.source_name != old_source_name:
+            if any(s.source_name == new_record.source_name for s in sources):
+                raise ValueError(
+                    f"Source '{new_record.source_name}' already exists"
+                )
+
+        replaced: List[SourceRecord] = []
+        for src in sources:
+            if src.source_name == old_source_name:
+                replaced.append(new_record)
+            else:
+                replaced.append(src)
+
+        self.save_sources(replaced)
+
+    # ------------------------------------------------------------------
+
     def set_active(self, source_names: List[str], active: bool) -> None:
         sources = self.load_sources()
         updated: List[SourceRecord] = []
 
+        names = set(source_names)
         for src in sources:
-            if src.source_name in source_names:
+            if src.source_name in names:
                 updated.append(replace(src, active=active))
             else:
                 updated.append(src)
@@ -159,11 +185,17 @@ class SourceController:
 
     # ------------------------------------------------------------------
 
-    def remove_source(self, source_name: str) -> None:
+    def delete_source_hard(self, source_name: str) -> None:
         """
-        Soft delete: mark inactive.
+        Hard delete: remove the entry entirely from JSONL.
         """
-        self.set_active([source_name], active=False)
+        sources = self.load_sources()
+        kept = [s for s in sources if s.source_name != source_name]
+
+        if len(kept) == len(sources):
+            raise KeyError(f"Source '{source_name}' not found")
+
+        self.save_sources(kept)
 
     # ============================================================================
     # FETCHING
@@ -181,14 +213,13 @@ class SourceController:
         Fetch posts for the given sources.
 
         Dispatch is grouped by source_kind.
+        Only ACTIVE sources are fetched.
         """
-
         sources = [
             s for s in self.load_sources()
-            if s.source_name in source_names and s.active
+            if s.source_name in set(source_names) and s.active
         ]
 
-        # Group by adapter kind
         by_kind: Dict[str, List[SourceRecord]] = {}
         for src in sources:
             by_kind.setdefault(src.source_kind, []).append(src)
@@ -197,7 +228,6 @@ class SourceController:
 
         for kind, group in by_kind.items():
             module = self._load_ingest_module(kind)
-
             names = [s.source_name for s in group]
 
             try:
@@ -243,9 +273,6 @@ class SourceController:
     # ============================================================================
 
     def _load_ingest_module(self, source_kind: str):
-        """
-        Resolve ingest adapter by source_kind.
-        """
         mapping = {
             "FACEBOOK": "sitrepc2.ingest.facebook",
             "TELEGRAM": "sitrepc2.ingest.telegram",
@@ -257,8 +284,6 @@ class SourceController:
             raise ValueError(f"Unknown source_kind '{source_kind}'")
 
         return importlib.import_module(mapping[source_kind])
-
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _now() -> str:
