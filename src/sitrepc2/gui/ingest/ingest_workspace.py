@@ -241,12 +241,9 @@ class IngestWorkspace(QWidget):
         if not post_ids:
             return
 
-        cmd = [
-            sys.executable,
-            "-m",
-            "sitrepc2.cli.extract_cmd",
-            "extract",
-        ]
+        # IMPORTANT:
+        # Use the sitrepc2 ENTRYPOINT, not python -m
+        cmd = ["sitrepc2", "extract"]
 
         for pid in post_ids:
             cmd.extend(["--post-id", str(pid)])
@@ -279,6 +276,7 @@ class IngestWorkspace(QWidget):
         self._progress.show()
 
         self._extract_timer.start(500)
+
 
     def _poll_extract_progress(self) -> None:
         if not self._extract_process:
