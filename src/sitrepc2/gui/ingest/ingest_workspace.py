@@ -253,6 +253,26 @@ class IngestWorkspace(QWidget):
             if isinstance(i.data(Qt.UserRole), str)
         ]
 
+    def _set_active(self, active: bool) -> None:
+        names = self._selected_source_names()
+        if names:
+            self.sources.set_active(names, active)
+            self._load_sources()
+
+    def _remove_sources(self) -> None:
+        names = self._selected_source_names()
+        if not names:
+            return
+
+        if QMessageBox.question(
+            self,
+            "Remove Sources",
+            "Mark selected sources as inactive?",
+        ) == QMessageBox.Yes:
+            for name in names:
+                self.sources.remove_source(name)
+            self._load_sources()
+
     # ------------------------------------------------------------------
     # FETCHING
     # ------------------------------------------------------------------
