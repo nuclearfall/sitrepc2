@@ -58,6 +58,7 @@ class LSSWorker(QObject):
 
     def __init__(self, ingest_posts: list[dict], reprocess: bool):
         super().__init__()
+
         self.ingest_posts = ingest_posts
         self.reprocess = reprocess
 
@@ -116,6 +117,8 @@ class IngestWorkspace(QWidget):
         self._nlp_manager = None
         self._nlp_thread: Optional[QThread] = None
         self._progress: Optional[QProgressDialog] = None
+        self._worker: Optional[LSSWorker] = None
+
 
         self._build_ui()
         self._load_sources()
@@ -296,32 +299,42 @@ class IngestWorkspace(QWidget):
         ingest_posts = self._selected_ingest_posts()
         if not ingest_posts:
             return
-            
+
         self.btn_extract.setEnabled(False)
 
         self._progress = QProgressDialog(
-            "Extracting events…", None, 0, len(ingest_posts), self
+            "Extracting events…",
+            "Cancel",
+            0,
+            len(ingest_posts),
+            self,
         )
-        self._progress.setWindowModality(Qt.ApplicationModal)
-        self._progress.setMinimumDuration(0)
+        self._progress.setWindowModality(Qt.NonModal)
         self._progress.show()
 
-        self._nlp_thread = QThread()
-        worker = LSSWorker(
+        self._nlp_thread = QThread(self)
+        self._worker = LSSWorker(
             ingest_posts=ingest_posts,
             reprocess=self.chk_reprocess.isChecked(),
         )
-        worker.moveToThread(self._nlp_thread)
+        self._worker.moveToThread(self._nlp_thread)
 
-        self._nlp_thread.started.connect(worker.run)
-        worker.progress.connect(self._on_extract_progress)
-        worker.finished.connect(self._on_extract_finished)
-        worker.failed.connect(self._on_extract_failed)
+        # start
+        self._nlp_thread.started.connect(self._worker.run)
 
-        worker.finished.connect(self._nlp_thread.quit)
-        worker.failed.connect(self._nlp_thread.quit)
+        # progress
+        self._worker.progress.connect(self._on_extract_progress)
+        self._worker.finished.connect(self._on_extract_finished)
+        self._worker.failed.connect(self._on_extract_failed)
+
+        # cleanup
+        self._worker.finished.connect(self._nlp_thread.quit)
+        self._worker.failed.connect(self._nlp_thread.quit)
+        self._nlp_thread.finished.connect(self._nlp_thread.deleteLater)
+        self._worker.finished.connect(self._worker.deleteLater)
 
         self._nlp_thread.start()
+
 
     def _on_extract_progress(self, current: int, total: int):
         if self._progress:
