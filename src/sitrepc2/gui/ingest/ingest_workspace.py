@@ -484,7 +484,18 @@ class IngestWorkspace(QWidget):
             force=self.force_check.isChecked(),
         )
         for r in results:
-            self.fetch_log.add(FetchLogEntry(**r.__dict__))
+            self.fetch_log.add(
+                FetchLogEntry(
+                    timestamp=r.timestamp,
+                    source_name=r.source_name,
+                    source_kind=r.source_kind,
+                    start_date=r.start_date,
+                    end_date=r.end_date,
+                    force=r.force,
+                    fetched_count=r.fetched_count,
+                    error=r.error,
+                )
+            )
         self._refresh_fetch_log()
         self._load_posts()
 
