@@ -116,7 +116,7 @@ def dom_dedupe(
     Must be run BEFORE dom_scoping
     """
 
-    cur = conn.cursor()
+    cur = dom_conn.cursor()
 
     # ---------------------------------------------------------
     # POST → SECTION
@@ -135,7 +135,7 @@ def dom_dedupe(
 
     for (post_id,) in cur.fetchall():
         _dedupe_children(
-            conn=conn,
+            conn=dom_conn,
             dom_snapshot_id=dom_snapshot_id,
             parent_id=post_id,
             node_type="SECTION",
@@ -165,7 +165,7 @@ def dom_dedupe(
 
     for (parent_id,) in cur.fetchall():
         _dedupe_children(
-            conn=conn,
+            conn=dom_conn,
             dom_snapshot_id=dom_snapshot_id,
             parent_id=parent_id,
             node_type="EVENT",
@@ -196,7 +196,7 @@ def dom_dedupe(
     for (event_id,) in cur.fetchall():
 
         def series_key(nid, _):
-            c = conn.cursor()
+            c = dom_conn.cursor()
             c.execute(
                 """
                 SELECT dp.text
@@ -217,7 +217,7 @@ def dom_dedupe(
             )
 
         _dedupe_children(
-            conn=conn,
+            conn=dom_conn,
             dom_snapshot_id=dom_snapshot_id,
             parent_id=event_id,
             node_type="LOCATION_SERIES",
@@ -241,7 +241,7 @@ def dom_dedupe(
 
     for (series_id,) in cur.fetchall():
         _dedupe_children(
-            conn=conn,
+            conn=dom_conn,
             dom_snapshot_id=dom_snapshot_id,
             parent_id=series_id,
             node_type="LOCATION",
@@ -254,4 +254,4 @@ def dom_dedupe(
             ),
         )
 
-    conn.commit()
+    dom_conn.commit()
