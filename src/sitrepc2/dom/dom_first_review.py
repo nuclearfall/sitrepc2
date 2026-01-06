@@ -96,7 +96,9 @@ def build_dom_for_first_review(
     # Hydrate DOM tree for UI
     # --------------------------------------------------------
 
-    return build_dom_tree(
+    tree = build_dom_tree(
         conn=conn,
         dom_snapshot_id=dom_snapshot_id,
     )
+
+    return tree, dom_snapshot_id
