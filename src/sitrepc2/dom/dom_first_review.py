@@ -84,6 +84,7 @@ def build_dom_for_first_review(
     # Deduplication
     dom_dedupe(
         dom_conn=conn,
+        dom_snapshot_id=dom_snapshot_id,
         context_hints=context_hints,
     )
 

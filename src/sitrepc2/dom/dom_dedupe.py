@@ -105,7 +105,7 @@ def _dedupe_children(
 
 def dom_dedupe(
     *,
-    conn: sqlite3.Connection,
+    dom_conn: sqlite3.Connection,
     dom_snapshot_id: int,
     context_hints: List[LSSContextHint],
 ) -> None:
