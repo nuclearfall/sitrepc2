@@ -3,12 +3,37 @@ from PySide6.QtWidgets import (
     QHeaderView, QAbstractItemView
 )
 from PySide6.QtCore import Qt
+import sqlite3
 
 from sitrepc2.gui.review.lss_run_model import LssRunModel
-from sitrepc2.gui.review.dom_tree_model import DomTreeModel  # New import
+from sitrepc2.gui.review.dom_tree_model import DomTreeModel
 from sitrepc2.dom.dom_first_review import build_dom_for_first_review
-from sitrepc2.lss.context_hints import get_context_hints  # Assumed to exist
-from sitrepc2.db import get_connection  # Assumed helper to open DB connections
+from sitrepc2.paths import records_path
+
+
+def query_context_hints(conn: sqlite3.Connection, lss_run_id: int) -> list[dict]:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT ctx_kind, text, start_token, end_token, scope, target_id, source
+        FROM lss_context_hints
+        WHERE lss_run_id = ?
+        """,
+        (lss_run_id,)
+    )
+    rows = cur.fetchall()
+    return [
+        {
+            "ctx_kind": row[0],
+            "text": row[1],
+            "start_token": row[2],
+            "end_token": row[3],
+            "scope": row[4],
+            "target_id": row[5],
+            "source": row[6],
+        }
+        for row in rows
+    ]
 
 
 class DomReviewWorkspace(QWidget):
@@ -77,7 +102,9 @@ class DomReviewWorkspace(QWidget):
         run_id = run.get("id")
         ingest_post_id = run.get("ingest_post_id")
 
-        with get_connection() as conn:
+        conn = sqlite3.connect(records_path)
+        conn.execute("PRAGMA foreign_keys = ON")
+        try:
             text_query = """
                 SELECT ip.text
                 FROM ingest_posts ip
@@ -90,7 +117,7 @@ class DomReviewWorkspace(QWidget):
             self.text_edit.setPlainText(row[0] if row else "")
 
             # Load or create the DOM tree
-            context_hints = get_context_hints(conn=conn, lss_run_id=run_id)
+            context_hints = query_context_hints(conn=conn, lss_run_id=run_id)
             root_node = build_dom_for_first_review(
                 conn=conn,
                 ingest_post_id=ingest_post_id,
@@ -105,3 +132,6 @@ class DomReviewWorkspace(QWidget):
 
             # Reset details panel
             self.node_detail_placeholder.setText("Node details will appear here")
+
+        finally:
+            conn.close()
