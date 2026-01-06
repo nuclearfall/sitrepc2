@@ -137,6 +137,13 @@ CREATE TABLE dom_node_state (
         REFERENCES dom_node(id)
         ON DELETE CASCADE
 );
+ALTER TABLE dom_node_state
+ADD COLUMN deduped BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE dom_node_state
+ADD COLUMN dedupe_target_id INTEGER
+    REFERENCES dom_node(id);
+
 
 ----------------------------------------------------------------------
 -- 7. Context Metadata (Snapshot-Scoped, Override-Aware)

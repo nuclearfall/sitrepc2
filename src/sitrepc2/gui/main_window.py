@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QAction
 
 from sitrepc2.gui.ingest.ingest_workspace import IngestWorkspace
-from sitrepc2.gui.review.review_workspace import ReviewWorkspace
+from sitrepc2.gui.review.review_workspace import DomReviewWorkspace
 
 
 # ============================================================================
@@ -47,7 +47,7 @@ class MainWindow(QMainWindow):
 
         # Workspaces
         self.ingest_workspace = IngestWorkspace(self)
-        self.review_workspace = ReviewWorkspace(self)
+        self.review_workspace = DomReviewWorkspace(self)
 
         self.workspace_stack.addWidget(self.ingest_workspace)
         self.workspace_stack.addWidget(self.review_workspace)

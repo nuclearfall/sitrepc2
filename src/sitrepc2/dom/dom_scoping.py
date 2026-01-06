@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import Dict, Iterable, List, Optional, Set
+from typing import Dict, Iterable, List, Set
 
 from sitrepc2.lss.lss_scoping import LSSContextHint
 from sitrepc2.config.paths import gazetteer_path
@@ -17,7 +17,6 @@ DOM_CONTEXT_ORDER = ("LOCATION", "SERIES", "EVENT", "SECTION", "POST")
 def _collect_context_chain(
     *,
     node_id: int,
-    node_type: str,
     dom_conn: sqlite3.Connection,
     context_hints: Iterable[LSSContextHint],
 ) -> Dict[str, Set[int]]:
@@ -30,7 +29,6 @@ def _collect_context_chain(
 
     cur = dom_conn.cursor()
 
-    # Walk ancestors bottom-up
     cur.execute(
         """
         WITH RECURSIVE ancestors(id, node_type, parent_id) AS (
@@ -91,13 +89,9 @@ def _filter_location_candidates(
     """
 
     cur = gaz_conn.cursor()
-
     norm = location_text.strip().lower()
 
-    # ------------------------------------------------------------
     # Alias match
-    # ------------------------------------------------------------
-
     cur.execute(
         """
         SELECT location_id
@@ -111,43 +105,31 @@ def _filter_location_candidates(
     if not candidates:
         return []
 
-    # ------------------------------------------------------------
-    # Region constraint
-    # ------------------------------------------------------------
-
+    # REGION constraint
     if "REGION" in context:
         region_ids = context["REGION"]
-
         cur.execute(
-            """
+            f"""
             SELECT location_id
             FROM location_regions
-            WHERE region_id IN ({})
-            """.format(",".join("?" * len(region_ids))),
+            WHERE region_id IN ({",".join("?" * len(region_ids))})
+            """,
             tuple(region_ids),
         )
+        candidates &= {row[0] for row in cur.fetchall()}
 
-        allowed = {row[0] for row in cur.fetchall()}
-        candidates &= allowed
-
-    # ------------------------------------------------------------
-    # Group constraint
-    # ------------------------------------------------------------
-
+    # GROUP constraint
     if "GROUP" in context:
         group_ids = context["GROUP"]
-
         cur.execute(
-            """
+            f"""
             SELECT location_id
             FROM location_groups
-            WHERE group_id IN ({})
-            """.format(",".join("?" * len(group_ids))),
+            WHERE group_id IN ({",".join("?" * len(group_ids))})
+            """,
             tuple(group_ids),
         )
-
-        allowed = {row[0] for row in cur.fetchall()}
-        candidates &= allowed
+        candidates &= {row[0] for row in cur.fetchall()}
 
     return sorted(candidates)
 
@@ -159,71 +141,94 @@ def _filter_location_candidates(
 def scope_dom_locations(
     *,
     dom_conn: sqlite3.Connection,
+    dom_snapshot_id: int,
     context_hints: Iterable[LSSContextHint],
 ) -> None:
     """
     Attach filtered LocationCandidates to DOM LOCATION nodes.
 
     Effects:
-      • Inserts rows into dom_location_candidate
-      • Does NOT mark resolved
-      • Does NOT select a candidate
+      • Inserts rows into dom_location_candidate (snapshot-scoped)
+      • Skips deduped LOCATION nodes
+      • Does NOT resolve or select
     """
 
     gaz_conn = sqlite3.connect(gazetteer_path())
     dom_cur = dom_conn.cursor()
+    gaz_cur = gaz_conn.cursor()
 
+    # Only non-deduped LOCATION nodes
     dom_cur.execute(
         """
-        SELECT id
-        FROM dom_node
-        WHERE node_type = 'LOCATION'
-        """
+        SELECT dn.id, dp.text
+        FROM dom_node dn
+        JOIN dom_node_state st
+          ON st.dom_node_id = dn.id
+         AND st.dom_snapshot_id = ?
+        JOIN dom_node_provenance dp
+          ON dp.dom_node_id = dn.id
+        WHERE dn.node_type = 'LOCATION'
+          AND st.deduped = FALSE
+        """,
+        (dom_snapshot_id,),
     )
 
-    location_nodes = [row[0] for row in dom_cur.fetchall()]
-
-    for dom_loc_id in location_nodes:
-        dom_cur.execute(
-            """
-            SELECT dn.id, dp.text
-            FROM dom_node dn
-            JOIN dom_node_provenance dp ON dp.dom_node_id = dn.id
-            WHERE dn.id = ?
-            """,
-            (dom_loc_id,),
-        )
-
-        row = dom_cur.fetchone()
-        if row is None:
-            continue
-
-        _, location_text = row
-
+    for dom_loc_id, location_text in dom_cur.fetchall():
         context = _collect_context_chain(
             node_id=dom_loc_id,
-            node_type="LOCATION",
             dom_conn=dom_conn,
             context_hints=context_hints,
         )
 
-        candidates = _filter_location_candidates(
+        candidate_ids = _filter_location_candidates(
             location_text=location_text,
             context=context,
             gaz_conn=gaz_conn,
         )
 
-        for loc_id in candidates:
+        for loc_id in candidate_ids:
+            gaz_cur.execute(
+                """
+                SELECT lat, lon, name, place, wikidata
+                FROM locations
+                WHERE location_id = ?
+                """,
+                (loc_id,),
+            )
+            row = gaz_cur.fetchone()
+            if row is None:
+                continue
+
+            lat, lon, name, place, wikidata = row
+
             dom_cur.execute(
                 """
                 INSERT INTO dom_location_candidate (
-                    dom_node_id,
-                    location_id,
-                    selected
+                    dom_snapshot_id,
+                    location_node_id,
+                    gazetteer_location_id,
+                    lat,
+                    lon,
+                    name,
+                    place,
+                    wikidata,
+                    confidence,
+                    dist_from_front,
+                    selected,
+                    persists
                 )
-                VALUES (?, ?, FALSE)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, FALSE, FALSE)
                 """,
-                (dom_loc_id, loc_id),
+                (
+                    dom_snapshot_id,
+                    dom_loc_id,
+                    loc_id,
+                    lat,
+                    lon,
+                    name,
+                    place,
+                    wikidata,
+                ),
             )
 
     dom_conn.commit()

@@ -59,6 +59,8 @@ class DomNode:
     parent: Optional["DomNode"] = field(default=None, init=False)
     children: List["DomNode"] = field(default_factory=list, init=False)
     contexts: List[Context] = field(default_factory=list, init=False)
+    deduped: bool = field(default=False, init=False)
+    dedupe_target: Optional["DomNode"] = field(default=None, init=False)
 
     # --------------------------------------------------
 
