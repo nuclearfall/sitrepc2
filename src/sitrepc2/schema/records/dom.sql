@@ -3,9 +3,6 @@ PRAGMA foreign_keys = ON;
 ----------------------------------------------------------------------
 -- DOM (Domain Object Model) Persistence Schema
 --
--- This schema persists DOM trees and their review lifecycle states.
--- It coexists with frozen lss_* tables inside records.db.
---
 -- Properties:
 -- • Append-only snapshots
 -- • Immutable structure & provenance
@@ -33,7 +30,6 @@ CREATE TABLE dom_lifecycle_stage (
 
 ----------------------------------------------------------------------
 -- 2. DOM Post Anchor
--- One DOM post corresponds to one ingest post in one LSS run
 ----------------------------------------------------------------------
 
 CREATE TABLE dom_post (
@@ -103,7 +99,7 @@ CREATE TABLE dom_node_provenance (
     dom_node_id INTEGER PRIMARY KEY,
 
     lss_event_id INTEGER,
-    lss_section_ids TEXT,        -- serialized list of contributing LSS section IDs
+    lss_section_ids TEXT,        -- JSON array of contributing section IDs
     gazetteer_entity_id INTEGER,
 
     FOREIGN KEY (dom_node_id)
@@ -127,6 +123,10 @@ CREATE TABLE dom_node_state (
         resolution_source IN ('AUTO', 'MANUAL')
     ),
 
+    -- Dedupe state (CORE FIELD — NOT A MIGRATION)
+    deduped BOOLEAN NOT NULL DEFAULT FALSE,
+    dedupe_target_id INTEGER,
+
     PRIMARY KEY (dom_snapshot_id, dom_node_id),
 
     FOREIGN KEY (dom_snapshot_id)
@@ -135,15 +135,11 @@ CREATE TABLE dom_node_state (
 
     FOREIGN KEY (dom_node_id)
         REFERENCES dom_node(id)
-        ON DELETE CASCADE
+        ON DELETE CASCADE,
+
+    FOREIGN KEY (dedupe_target_id)
+        REFERENCES dom_node(id)
 );
-ALTER TABLE dom_node_state
-ADD COLUMN deduped BOOLEAN NOT NULL DEFAULT FALSE;
-
-ALTER TABLE dom_node_state
-ADD COLUMN dedupe_target_id INTEGER
-    REFERENCES dom_node(id);
-
 
 ----------------------------------------------------------------------
 -- 7. Context Metadata (Snapshot-Scoped, Override-Aware)
@@ -169,6 +165,12 @@ CREATE TABLE dom_context (
         ON DELETE CASCADE
 );
 
+CREATE INDEX idx_dom_context_snapshot
+    ON dom_context(dom_snapshot_id);
+
+CREATE INDEX idx_dom_context_node
+    ON dom_context(dom_node_id);
+
 ----------------------------------------------------------------------
 -- 8. Actors (Metadata, Event-Scoped)
 ----------------------------------------------------------------------
@@ -193,8 +195,6 @@ CREATE TABLE dom_actor (
 ----------------------------------------------------------------------
 -- 9. Location Candidates (Snapshot-Scoped)
 ----------------------------------------------------------------------
-
--- Revised to support embedded gazetteer snapshots (Option B)
 
 CREATE TABLE dom_location_candidate (
     dom_snapshot_id INTEGER NOT NULL,
@@ -225,7 +225,6 @@ CREATE TABLE dom_location_candidate (
         ON DELETE CASCADE
 );
 
-
 ----------------------------------------------------------------------
 -- 10. Commit Eligibility (Derived, Snapshot-Scoped)
 ----------------------------------------------------------------------
@@ -247,9 +246,3 @@ CREATE TABLE dom_commit_eligibility (
         REFERENCES dom_node(id)
         ON DELETE CASCADE
 );
-
-CREATE INDEX idx_dom_context_snapshot
-    ON dom_context(dom_snapshot_id);
-
-CREATE INDEX idx_dom_context_node
-    ON dom_context(dom_node_id);
