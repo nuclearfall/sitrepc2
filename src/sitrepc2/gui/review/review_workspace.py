@@ -1,10 +1,14 @@
 from PySide6.QtWidgets import (
-    QWidget, QSplitter, QTableView, QPlainTextEdit, QLabel, QVBoxLayout,
+    QWidget, QSplitter, QTableView, QPlainTextEdit, QTreeView, QLabel, QVBoxLayout,
     QHeaderView, QAbstractItemView
 )
 from PySide6.QtCore import Qt
 
-from .lss_run_model import LssRunModel  # assumed to exist and handle run data
+from sitrepc2.gui.review.lss_run_model import LssRunModel
+from sitrepc2.gui.review.dom_tree_model import DomTreeModel  # New import
+from sitrepc2.dom.dom_first_review import build_dom_for_first_review
+from sitrepc2.lss.context_hints import get_context_hints  # Assumed to exist
+from sitrepc2.db import get_connection  # Assumed helper to open DB connections
 
 
 class DomReviewWorkspace(QWidget):
@@ -41,9 +45,10 @@ class DomReviewWorkspace(QWidget):
 
         # Right vertical splitter (DOM tree + node details)
         right_splitter = QSplitter(Qt.Vertical)
-        self.dom_tree_placeholder = QLabel("👆 Select a run to load DOM snapshot")
-        self.dom_tree_placeholder.setAlignment(Qt.AlignCenter)
-        right_splitter.addWidget(self.dom_tree_placeholder)
+
+        self.dom_tree_view = QTreeView()
+        self.dom_tree_view.setHeaderHidden(True)
+        right_splitter.addWidget(self.dom_tree_view)
 
         self.node_detail_placeholder = QLabel("Node details will appear here")
         self.node_detail_placeholder.setAlignment(Qt.AlignCenter)
@@ -68,8 +73,35 @@ class DomReviewWorkspace(QWidget):
         run = self.model.getRun(current_index)
         if not run:
             return
+
         run_id = run.get("id")
-        # You’ll later connect this to database query:
-        self.text_edit.setPlainText(f"<stub text for run_id={run_id}>")
-        self.dom_tree_placeholder.setText(f"DOM tree for run {run_id} would be displayed here.")
-        self.node_detail_placeholder.setText("Node details will appear here")
+        ingest_post_id = run.get("ingest_post_id")
+
+        with get_connection() as conn:
+            text_query = """
+                SELECT ip.text
+                FROM ingest_posts ip
+                JOIN lss_runs lr ON lr.ingest_post_id = ip.id
+                WHERE lr.id = ?
+            """
+            cur = conn.cursor()
+            cur.execute(text_query, (run_id,))
+            row = cur.fetchone()
+            self.text_edit.setPlainText(row[0] if row else "")
+
+            # Load or create the DOM tree
+            context_hints = get_context_hints(conn=conn, lss_run_id=run_id)
+            root_node = build_dom_for_first_review(
+                conn=conn,
+                ingest_post_id=ingest_post_id,
+                lss_run_id=run_id,
+                context_hints=context_hints,
+            )
+
+            # Populate tree view
+            model = DomTreeModel(root_node)
+            self.dom_tree_view.setModel(model)
+            self.dom_tree_view.expandAll()
+
+            # Reset details panel
+            self.node_detail_placeholder.setText("Node details will appear here")
