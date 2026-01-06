@@ -267,11 +267,15 @@ def dom_ingest(
 
     cur.execute(
         """
-        SELECT id, lss_event_id
-        FROM lss_location_series
-        ORDER BY id
-        """
+        SELECT ls.id, ls.lss_event_id
+        FROM lss_location_series ls
+        JOIN lss_events e ON e.id = ls.lss_event_id
+        WHERE e.lss_run_id = ?
+        ORDER BY ls.id
+        """,
+        (lss_run_id,),
     )
+
 
     series_order: Dict[int, int] = {}
 
