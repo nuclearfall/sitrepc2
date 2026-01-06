@@ -8,7 +8,7 @@ import sqlite3
 from sitrepc2.gui.review.lss_run_model import LssRunModel
 from sitrepc2.gui.review.dom_tree_model import DomTreeModel
 from sitrepc2.dom.dom_first_review import build_dom_for_first_review
-from sitrepc2.paths import records_path
+from sitrepc2.config.paths import records_path
 
 
 def query_context_hints(conn: sqlite3.Connection, lss_run_id: int) -> list[dict]:
