@@ -4,7 +4,7 @@ import sqlite3
 from typing import Iterable, Dict, Set
 
 from sitrepc2.lss.lss_scoping import LSSContextHint
-from sitrepc2.dom.dom_scoping import _collect_context_chain
+from sitrepc2.dom.dom_scoping import collect_context_chain
 
 
 def materialize_dom_context(
@@ -61,7 +61,8 @@ def materialize_dom_context(
     node_ids = [row[0] for row in cur.fetchall()]
 
     for node_id in node_ids:
-        ctx_map: Dict[str, Set[int]] = _collect_context_chain(
+        ctx_map: Dict[str, Set[int]] = collect_context_chain(
+            dom_snapshot_id=dom_snapshot_id,
             node_id=node_id,
             dom_conn=dom_conn,
             context_hints=context_hints,

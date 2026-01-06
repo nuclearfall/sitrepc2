@@ -14,7 +14,7 @@ from sitrepc2.config.paths import gazetteer_path
 DOM_CONTEXT_ORDER = ("LOCATION", "SERIES", "EVENT", "SECTION", "POST")
 
 
-def _collect_context_chain(
+def collect_context_chain(
     *,
     dom_snapshot_id: int,
     node_id: int,
