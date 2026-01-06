@@ -8,6 +8,7 @@ from sitrepc2.dom.dom_dedupe import dom_dedupe
 from sitrepc2.dom.dom_scoping import scope_dom_locations
 from sitrepc2.dom.dom_tree_builder import build_dom_tree
 from sitrepc2.dom.dom_context_loader import load_lss_context_hints
+from sitrepc2.dom.dom_context_materializer import materialize_dom_context
 
 
 def build_dom_for_first_review(
