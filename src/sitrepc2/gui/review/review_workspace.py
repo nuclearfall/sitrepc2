@@ -28,7 +28,6 @@ from sitrepc2.dom.dom_snapshot import advance_dom_snapshot
 from sitrepc2.dom.dom_commit import recompute_commit_eligibility
 
 
-
 # ============================================================================
 # DOM Review Workspace
 # ============================================================================
@@ -52,7 +51,6 @@ class DomReviewWorkspace(QWidget):
         # ------------------------------------------------------------
 
         layout = QVBoxLayout(self)
-
         main_splitter = QSplitter(Qt.Horizontal)
         layout.addWidget(main_splitter)
 
@@ -62,15 +60,13 @@ class DomReviewWorkspace(QWidget):
 
         left_splitter = QSplitter(Qt.Vertical)
 
-        # ---- Review actions ----
-
+        # ---- Actions ----
         self.prepare_button = QPushButton("Prepare for Review")
         self.prepare_button.clicked.connect(self.prepare_for_review)
 
         self.commit_button = QPushButton("Commit Reviewed")
-        self.commit_button.setEnabled(False)  # wired in Chunk 5
+        self.commit_button.setEnabled(False)
         self.commit_button.clicked.connect(self.commit_reviewed)
-
 
         action_panel = QWidget()
         action_layout = QVBoxLayout(action_panel)
@@ -81,28 +77,23 @@ class DomReviewWorkspace(QWidget):
         left_splitter.addWidget(action_panel)
 
         # ---- Run list ----
-
         self.table_view = QTableView()
         self.table_view.setModel(self.model)
         self.table_view.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table_view.setSelectionMode(QAbstractItemView.SingleSelection)
-
-        # self.table_view.setSelectionBehavior(QAbstractItemView.SelectRows)
-        # self.table_view.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.table_view.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table_view.verticalHeader().setVisible(False)
 
         left_splitter.addWidget(self.table_view)
 
-        # ---- Text view ----
-
+        # ---- Text ----
         self.text_edit = QPlainTextEdit()
         self.text_edit.setReadOnly(True)
         left_splitter.addWidget(self.text_edit)
 
-        left_splitter.setStretchFactor(0, 0)  # buttons
-        left_splitter.setStretchFactor(1, 2)  # run list
-        left_splitter.setStretchFactor(2, 1)  # text
+        left_splitter.setStretchFactor(0, 0)
+        left_splitter.setStretchFactor(1, 2)
+        left_splitter.setStretchFactor(2, 1)
 
         # ====================
         # Right pane
@@ -113,23 +104,19 @@ class DomReviewWorkspace(QWidget):
         self.dom_tree_view = QTreeView()
         self.dom_tree_view.setHeaderHidden(True)
         self.dom_tree_view.setExpandsOnDoubleClick(False)
-        self.dom_tree_view.setItemsExpandable(True)
-
         right_splitter.addWidget(self.dom_tree_view)
 
         self.node_detail_placeholder = QWidget()
-        self.node_detail_layout = QVBoxLayout(self.node_detail_placeholder)
-        self.node_detail_label = QLabel("Select a DOM node to view details")
-        self.node_detail_label.setAlignment(Qt.AlignCenter)
-        self.node_detail_layout.addWidget(self.node_detail_label)
+        node_layout = QVBoxLayout(self.node_detail_placeholder)
+        label = QLabel("Select a DOM node to view details")
+        label.setAlignment(Qt.AlignCenter)
+        node_layout.addWidget(label)
 
         right_splitter.addWidget(self.node_detail_placeholder)
 
         # ---- Assemble ----
-
         main_splitter.addWidget(left_splitter)
         main_splitter.addWidget(right_splitter)
-
         main_splitter.setStretchFactor(0, 1)
         main_splitter.setStretchFactor(1, 3)
 
@@ -138,7 +125,7 @@ class DomReviewWorkspace(QWidget):
         # ------------------------------------------------------------
 
         self.table_view.selectionModel().currentChanged.connect(
-            self.on_run_selected
+            self.on_run_focused
         )
 
         # ------------------------------------------------------------
@@ -146,14 +133,13 @@ class DomReviewWorkspace(QWidget):
         # ------------------------------------------------------------
 
         if self.model.rowCount() > 0:
-            # self.table_view.setCurrentIndex(self.model.index(0, 0))
-            self.table_view.setCurrentIndex(self.model.index(0, 1))
+            self.table_view.setCurrentIndex(self.model.index(0, 0))
 
     # ------------------------------------------------------------------
-    # Run selection (focus only)
+    # Focused run → preview DOM tree if snapshot exists
     # ------------------------------------------------------------------
 
-    def on_run_selected(self, current: QModelIndex, previous: QModelIndex):
+    def on_run_focused(self, current: QModelIndex, previous: QModelIndex):
         if not current.isValid():
             return
 
@@ -164,17 +150,16 @@ class DomReviewWorkspace(QWidget):
         run_id = run["id"]
         ingest_post_id = run["ingest_post_id"]
 
-        # Reset DOM panel
         self.dom_tree_view.setModel(None)
-        self.dom_model = None
         self.current_dom_tree = None
         self.dom_snapshot_id = None
+        self.commit_button.setEnabled(False)
 
         conn = sqlite3.connect(records_path())
         try:
             cur = conn.cursor()
 
-            # ---- Load post text ----
+            # Load post text
             cur.execute(
                 """
                 SELECT ip.text
@@ -190,13 +175,9 @@ class DomReviewWorkspace(QWidget):
             if not row:
                 return
 
-            # ---- Load DOM snapshot if it exists ----
             snapshot_id = self._get_created_snapshot_id(
-                conn,
-                ingest_post_id,
-                run_id,
+                conn, ingest_post_id, run_id
             )
-            self.commit_button.setEnabled(True)
 
             if snapshot_id is None:
                 return
@@ -206,6 +187,7 @@ class DomReviewWorkspace(QWidget):
                 dom_snapshot_id=snapshot_id,
             )
             self.dom_snapshot_id = snapshot_id
+            self.commit_button.setEnabled(True)
 
             self.dom_model = DomTreeModel(self.current_dom_tree)
             self.dom_tree_view.setModel(self.dom_model)
@@ -215,39 +197,42 @@ class DomReviewWorkspace(QWidget):
             conn.close()
 
     # ------------------------------------------------------------------
-    # Prepare for Review (batch)
+    # Prepare for Review (batch from selection)
     # ------------------------------------------------------------------
 
     def prepare_for_review(self):
-        runs = self.model.get_checked_runs()
+        sel = self.table_view.selectionModel()
+        if not sel:
+            return
+
+        runs = [
+            self.model.get_run(idx)
+            for idx in sel.selectedRows()
+            if self.model.get_run(idx)
+        ]
         if not runs:
             return
 
         conn = sqlite3.connect(records_path())
         try:
             for run in runs:
-                lss_run_id = run["id"]
+                run_id = run["id"]
                 ingest_post_id = run["ingest_post_id"]
 
-                existing = self._get_created_snapshot_id(
-                    conn,
-                    ingest_post_id,
-                    lss_run_id,
-                )
-                if existing is not None:
+                if self._get_created_snapshot_id(conn, ingest_post_id, run_id):
                     continue
 
                 build_dom_for_first_review(
                     conn=conn,
                     ingest_post_id=ingest_post_id,
-                    lss_run_id=lss_run_id,
+                    lss_run_id=run_id,
                 )
-
-            self.model.clear_checks()
-
         finally:
             conn.close()
 
+    # ------------------------------------------------------------------
+    # Commit reviewed snapshot
+    # ------------------------------------------------------------------
 
     def commit_reviewed(self):
         if not self.current_dom_tree or self.dom_snapshot_id is None:
@@ -255,32 +240,27 @@ class DomReviewWorkspace(QWidget):
 
         conn = sqlite3.connect(records_path())
         try:
-            # 1. Persist review edits
             persist_dom_tree(
                 conn=conn,
                 dom_snapshot_id=self.dom_snapshot_id,
                 root=self.current_dom_tree,
             )
 
-            # 2. Recompute eligibility on current snapshot
             recompute_commit_eligibility(
                 conn=conn,
                 dom_snapshot_id=self.dom_snapshot_id,
             )
 
-            # 3. Advance lifecycle → new snapshot
             new_snapshot_id = advance_dom_snapshot(
                 conn=conn,
                 dom_snapshot_id=self.dom_snapshot_id,
             )
 
-            # 4. Recompute eligibility on new snapshot
             recompute_commit_eligibility(
                 conn=conn,
                 dom_snapshot_id=new_snapshot_id,
             )
 
-            # 5. Reload DOM tree
             self.current_dom_tree = build_dom_tree(
                 conn=conn,
                 dom_snapshot_id=new_snapshot_id,
@@ -341,5 +321,3 @@ class DomReviewWorkspace(QWidget):
             return [dict(zip(cols, row)) for row in cur.fetchall()]
         finally:
             conn.close()
-
-
