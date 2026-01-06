@@ -28,7 +28,6 @@ def _collect_context_chain(
 
     cur = dom_conn.cursor()
 
-    # Walk ancestors but restrict to nodes belonging to the same dom_post
     cur.execute(
         """
         WITH RECURSIVE ancestors(id, node_type, parent_id) AS (
@@ -61,7 +60,6 @@ def _collect_context_chain(
             if hint.scope != scope:
                 continue
 
-            # Target scoping: either global or exact node match
             target_ok = (
                 hint.target_id is None
                 or node_ids_by_type.get(scope) == hint.target_id
@@ -92,7 +90,6 @@ def _filter_location_candidates(
     cur = gaz_conn.cursor()
     norm = location_text.strip().lower()
 
-    # Alias match
     cur.execute(
         """
         SELECT location_id
@@ -106,7 +103,6 @@ def _filter_location_candidates(
     if not candidates:
         return []
 
-    # REGION constraint
     if "REGION" in context and context["REGION"]:
         region_ids = context["REGION"]
         cur.execute(
@@ -119,7 +115,6 @@ def _filter_location_candidates(
         )
         candidates &= {row[0] for row in cur.fetchall()}
 
-    # GROUP constraint
     if "GROUP" in context and context["GROUP"]:
         group_ids = context["GROUP"]
         cur.execute(
@@ -147,7 +142,6 @@ def scope_dom_locations(
 ) -> None:
     """
     Attach filtered LocationCandidates to DOM LOCATION nodes.
-
     Snapshot-local and idempotent.
     """
 
@@ -155,10 +149,10 @@ def scope_dom_locations(
     dom_cur = dom_conn.cursor()
     gaz_cur = gaz_conn.cursor()
 
-    # Only non-deduped LOCATION nodes in this snapshot
+    # Fetch LOCATION nodes with their LSS event provenance
     dom_cur.execute(
         """
-        SELECT dn.id, dp.text
+        SELECT dn.id, dp.lss_event_id
         FROM dom_node dn
         JOIN dom_node_state st
           ON st.dom_node_id = dn.id
@@ -171,7 +165,28 @@ def scope_dom_locations(
         (dom_snapshot_id,),
     )
 
-    for dom_loc_id, location_text in dom_cur.fetchall():
+    for dom_loc_id, lss_event_id in dom_cur.fetchall():
+        if lss_event_id is None:
+            continue
+
+        # Retrieve location texts from LSS
+        dom_cur.execute(
+            """
+            SELECT li.text
+            FROM lss_location_items li
+            JOIN lss_location_series ls
+              ON ls.id = li.series_id
+            WHERE ls.lss_event_id = ?
+            ORDER BY li.ordinal
+            """,
+            (lss_event_id,),
+        )
+
+        location_texts = [row[0] for row in dom_cur.fetchall()]
+
+        if not location_texts:
+            continue
+
         context = _collect_context_chain(
             dom_snapshot_id=dom_snapshot_id,
             node_id=dom_loc_id,
@@ -179,70 +194,70 @@ def scope_dom_locations(
             context_hints=context_hints,
         )
 
-        candidate_ids = _filter_location_candidates(
-            location_text=location_text,
-            context=context,
-            gaz_conn=gaz_conn,
-        )
-
-        for loc_id in candidate_ids:
-            # Idempotency guard
-            dom_cur.execute(
-                """
-                SELECT 1
-                FROM dom_location_candidate
-                WHERE dom_snapshot_id = ?
-                  AND location_node_id = ?
-                  AND gazetteer_location_id = ?
-                """,
-                (dom_snapshot_id, dom_loc_id, loc_id),
+        for location_text in location_texts:
+            candidate_ids = _filter_location_candidates(
+                location_text=location_text,
+                context=context,
+                gaz_conn=gaz_conn,
             )
-            if dom_cur.fetchone():
-                continue
 
-            gaz_cur.execute(
-                """
-                SELECT lat, lon, name, place, wikidata
-                FROM locations
-                WHERE location_id = ?
-                """,
-                (loc_id,),
-            )
-            row = gaz_cur.fetchone()
-            if row is None:
-                continue
-
-            lat, lon, name, place, wikidata = row
-
-            dom_cur.execute(
-                """
-                INSERT INTO dom_location_candidate (
-                    dom_snapshot_id,
-                    location_node_id,
-                    gazetteer_location_id,
-                    lat,
-                    lon,
-                    name,
-                    place,
-                    wikidata,
-                    confidence,
-                    dist_from_front,
-                    selected,
-                    persists
+            for loc_id in candidate_ids:
+                dom_cur.execute(
+                    """
+                    SELECT 1
+                    FROM dom_location_candidate
+                    WHERE dom_snapshot_id = ?
+                      AND location_node_id = ?
+                      AND gazetteer_location_id = ?
+                    """,
+                    (dom_snapshot_id, dom_loc_id, loc_id),
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, FALSE, FALSE)
-                """,
-                (
-                    dom_snapshot_id,
-                    dom_loc_id,
-                    loc_id,
-                    lat,
-                    lon,
-                    name,
-                    place,
-                    wikidata,
-                ),
-            )
+                if dom_cur.fetchone():
+                    continue
+
+                gaz_cur.execute(
+                    """
+                    SELECT lat, lon, name, place, wikidata
+                    FROM locations
+                    WHERE location_id = ?
+                    """,
+                    (loc_id,),
+                )
+                row = gaz_cur.fetchone()
+                if row is None:
+                    continue
+
+                lat, lon, name, place, wikidata = row
+
+                dom_cur.execute(
+                    """
+                    INSERT INTO dom_location_candidate (
+                        dom_snapshot_id,
+                        location_node_id,
+                        gazetteer_location_id,
+                        lat,
+                        lon,
+                        name,
+                        place,
+                        wikidata,
+                        confidence,
+                        dist_from_front,
+                        selected,
+                        persists
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, FALSE, FALSE)
+                    """,
+                    (
+                        dom_snapshot_id,
+                        dom_loc_id,
+                        loc_id,
+                        lat,
+                        lon,
+                        name,
+                        place,
+                        wikidata,
+                    ),
+                )
 
     dom_conn.commit()
     gaz_conn.close()
