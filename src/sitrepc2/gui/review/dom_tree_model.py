@@ -1,62 +1,110 @@
 from PySide6.QtCore import Qt, QAbstractItemModel, QModelIndex
 from sitrepc2.dom.nodes import DomNode
 
-
+ 
 class DomTreeModel(QAbstractItemModel):
     def __init__(self, root: DomNode):
         super().__init__()
         self.root = root
 
-    def index(self, row: int, column: int, parent: QModelIndex) -> QModelIndex:
-        parent_node = parent.internalPointer() if parent.isValid() else self.root
-        if 0 <= row < len(parent_node.children):
-            return self.createIndex(row, column, parent_node.children[row])
+    # -------------------------
+    # Index / Parent
+    # -------------------------
+
+    def index(self, row, column, parent=QModelIndex()):
+        try:
+            parent_node = parent.internalPointer() if parent.isValid() else self.root
+            if (
+                parent_node
+                and hasattr(parent_node, "children")
+                and 0 <= row < len(parent_node.children)
+            ):
+                return self.createIndex(row, column, parent_node.children[row])
+        except Exception:
+            pass
         return QModelIndex()
 
-    def parent(self, index: QModelIndex) -> QModelIndex:
+    def parent(self, index):
         if not index.isValid():
             return QModelIndex()
-        node = index.internalPointer()
-        parent = node.parent
-        if parent is None or parent == self.root:
+
+        try:
+            node = index.internalPointer()
+            parent = getattr(node, "parent", None)
+            if parent is None or parent == self.root:
+                return QModelIndex()
+
+            grandparent = getattr(parent, "parent", None)
+            if not grandparent or not hasattr(grandparent, "children"):
+                return QModelIndex()
+
+            row = grandparent.children.index(parent)
+            return self.createIndex(row, 0, parent)
+        except Exception:
             return QModelIndex()
-        grandparent = parent.parent
-        row = grandparent.children.index(parent) if grandparent else 0
-        return self.createIndex(row, 0, parent)
 
-    def rowCount(self, parent: QModelIndex) -> int:
-        node = parent.internalPointer() if parent.isValid() else self.root
-        return len(node.children)
+    # -------------------------
+    # Counts
+    # -------------------------
 
-    def columnCount(self, parent: QModelIndex) -> int:
+    def rowCount(self, parent=QModelIndex()):
+        try:
+            node = parent.internalPointer() if parent.isValid() else self.root
+            return len(node.children) if node and hasattr(node, "children") else 0
+        except Exception:
+            return 0
+
+    def columnCount(self, parent=QModelIndex()):
         return 1
 
-    def data(self, index: QModelIndex, role: int):
-        if not index.isValid():
-            return None
-        node = index.internalPointer()
-        if role == Qt.DisplayRole:
-            return node.summary
-        elif role == Qt.CheckStateRole:
-            return Qt.Checked if node.selected else Qt.Unchecked
-        return None
+    # -------------------------
+    # Data
+    # -------------------------
 
-    def setData(self, index: QModelIndex, value, role: int):
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid():
+            return ""
+
+        try:
+            node = index.internalPointer()
+            if role == Qt.DisplayRole:
+                return getattr(node, "summary", "")
+            if role == Qt.CheckStateRole:
+                return Qt.Checked if getattr(node, "selected", False) else Qt.Unchecked
+        except Exception:
+            return ""
+
+        return ""
+
+    def setData(self, index, value, role):
         if not index.isValid():
             return False
-        node: DomNode = index.internalPointer()
-        if role == Qt.CheckStateRole:
-            node.selected = value == Qt.Checked
-            self.dataChanged.emit(index, index, [Qt.CheckStateRole])
-            return True
+
+        try:
+            node = index.internalPointer()
+            if role == Qt.CheckStateRole:
+                node.selected = value == Qt.Checked
+                self.dataChanged.emit(index, index, [Qt.CheckStateRole])
+                return True
+        except Exception:
+            return False
+
         return False
 
-    def flags(self, index: QModelIndex):
+    # -------------------------
+    # Flags / Header
+    # -------------------------
+
+    def flags(self, index):
         if not index.isValid():
             return Qt.NoItemFlags
-        return Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsUserCheckable
+        return (
+            Qt.ItemIsEnabled
+            | Qt.ItemIsSelectable
+            | Qt.ItemIsUserCheckable
+        )
 
-    def headerData(self, section: int, orientation, role: int):
+    def headerData(self, section, orientation, role):
         if role == Qt.DisplayRole and orientation == Qt.Horizontal:
             return "DOM Node Summary"
-        return None
+        return ""
