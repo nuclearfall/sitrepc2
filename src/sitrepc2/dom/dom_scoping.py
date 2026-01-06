@@ -16,40 +16,43 @@ DOM_CONTEXT_ORDER = ("LOCATION", "SERIES", "EVENT", "SECTION", "POST")
 
 def _collect_context_chain(
     *,
+    dom_snapshot_id: int,
     node_id: int,
     dom_conn: sqlite3.Connection,
     context_hints: Iterable[LSSContextHint],
 ) -> Dict[str, Set[int]]:
     """
     Resolve effective context for a DOM node by dominance order.
-
-    Returns:
-        ctx_kind -> set(entity_ids)
+    Snapshot-local and deterministic.
     """
 
     cur = dom_conn.cursor()
 
+    # Walk ancestors but restrict to nodes belonging to the same dom_post
     cur.execute(
         """
         WITH RECURSIVE ancestors(id, node_type, parent_id) AS (
-            SELECT id, node_type, parent_id
-            FROM dom_node
-            WHERE id = ?
+            SELECT dn.id, dn.node_type, dn.parent_id
+            FROM dom_node dn
+            JOIN dom_node_state st
+              ON st.dom_node_id = dn.id
+             AND st.dom_snapshot_id = ?
+            WHERE dn.id = ?
 
             UNION ALL
 
-            SELECT n.id, n.node_type, n.parent_id
-            FROM dom_node n
-            JOIN ancestors a ON n.id = a.parent_id
+            SELECT parent.id, parent.node_type, parent.parent_id
+            FROM dom_node parent
+            JOIN ancestors a ON parent.id = a.parent_id
         )
         SELECT id, node_type
         FROM ancestors
         """,
-        (node_id,),
+        (dom_snapshot_id, node_id),
     )
 
     nodes = cur.fetchall()
-    node_ids_by_type = {nt: i for i, nt in nodes}
+    node_ids_by_type = {nt: nid for nid, nt in nodes}
 
     resolved: Dict[str, Set[int]] = {}
 
@@ -58,6 +61,7 @@ def _collect_context_chain(
             if hint.scope != scope:
                 continue
 
+            # Target scoping: either global or exact node match
             target_ok = (
                 hint.target_id is None
                 or node_ids_by_type.get(scope) == hint.target_id
@@ -83,9 +87,6 @@ def _filter_location_candidates(
 ) -> List[int]:
     """
     Filter gazetteer location candidates using REGION / GROUP context.
-
-    Returns:
-        list of location_id
     """
 
     cur = gaz_conn.cursor()
@@ -106,7 +107,7 @@ def _filter_location_candidates(
         return []
 
     # REGION constraint
-    if "REGION" in context:
+    if "REGION" in context and context["REGION"]:
         region_ids = context["REGION"]
         cur.execute(
             f"""
@@ -119,7 +120,7 @@ def _filter_location_candidates(
         candidates &= {row[0] for row in cur.fetchall()}
 
     # GROUP constraint
-    if "GROUP" in context:
+    if "GROUP" in context and context["GROUP"]:
         group_ids = context["GROUP"]
         cur.execute(
             f"""
@@ -147,17 +148,14 @@ def scope_dom_locations(
     """
     Attach filtered LocationCandidates to DOM LOCATION nodes.
 
-    Effects:
-      • Inserts rows into dom_location_candidate (snapshot-scoped)
-      • Skips deduped LOCATION nodes
-      • Does NOT resolve or select
+    Snapshot-local and idempotent.
     """
 
     gaz_conn = sqlite3.connect(gazetteer_path())
     dom_cur = dom_conn.cursor()
     gaz_cur = gaz_conn.cursor()
 
-    # Only non-deduped LOCATION nodes
+    # Only non-deduped LOCATION nodes in this snapshot
     dom_cur.execute(
         """
         SELECT dn.id, dp.text
@@ -175,6 +173,7 @@ def scope_dom_locations(
 
     for dom_loc_id, location_text in dom_cur.fetchall():
         context = _collect_context_chain(
+            dom_snapshot_id=dom_snapshot_id,
             node_id=dom_loc_id,
             dom_conn=dom_conn,
             context_hints=context_hints,
@@ -187,6 +186,20 @@ def scope_dom_locations(
         )
 
         for loc_id in candidate_ids:
+            # Idempotency guard
+            dom_cur.execute(
+                """
+                SELECT 1
+                FROM dom_location_candidate
+                WHERE dom_snapshot_id = ?
+                  AND location_node_id = ?
+                  AND gazetteer_location_id = ?
+                """,
+                (dom_snapshot_id, dom_loc_id, loc_id),
+            )
+            if dom_cur.fetchone():
+                continue
+
             gaz_cur.execute(
                 """
                 SELECT lat, lon, name, place, wikidata

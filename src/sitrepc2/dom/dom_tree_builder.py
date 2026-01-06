@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from sitrepc2.dom.nodes import (
     DomNode,
@@ -27,15 +27,27 @@ def build_dom_tree(
 ) -> PostNode:
     """
     Hydrate a DOM tree for a given snapshot.
-
-    Returns:
-        PostNode (root)
     """
 
     cur = conn.cursor()
 
     # --------------------------------------------------------
-    # Load all nodes (structure + state)
+    # Resolve dom_post identity
+    # --------------------------------------------------------
+
+    cur.execute(
+        """
+        SELECT dp.ingest_post_id, dp.lss_run_id
+        FROM dom_snapshot ds
+        JOIN dom_post dp ON dp.id = ds.dom_post_id
+        WHERE ds.id = ?
+        """,
+        (dom_snapshot_id,),
+    )
+    ingest_post_id, lss_run_id = cur.fetchone()
+
+    # --------------------------------------------------------
+    # Load all nodes (structure + snapshot state)
     # --------------------------------------------------------
 
     cur.execute(
@@ -47,13 +59,12 @@ def build_dom_tree(
             dn.sibling_order,
 
             st.selected,
+            st.summary,
             st.resolved,
             st.deduped,
             st.dedupe_target_id,
 
-            dp.lss_event_id,
-            dp.lss_section_ids,
-            dp.gazetteer_entity_id
+            dp.lss_event_id
         FROM dom_node dn
         JOIN dom_node_state st
           ON st.dom_node_id = dn.id
@@ -79,99 +90,81 @@ def build_dom_tree(
         parent_id,
         sibling_order,
         selected,
+        summary,
         resolved,
         deduped,
         dedupe_target_id,
         lss_event_id,
-        lss_section_ids,
-        gaz_entity_id,
     ) in rows:
 
         if node_type == "POST":
             node = PostNode(
                 node_id=str(node_id),
-                summary="",
-                ingest_post_id=-1,
-                lss_run_id=-1,
+                summary=summary or "",
+                ingest_post_id=ingest_post_id,
+                lss_run_id=lss_run_id,
             )
 
         elif node_type == "SECTION":
             node = SectionNode(
                 node_id=str(node_id),
-                summary="",
+                summary=summary or "",
                 section_index=sibling_order,
             )
 
         elif node_type == "EVENT":
             node = EventNode(
                 node_id=str(node_id),
-                summary="",
+                summary=summary or "",
                 event_uid=str(lss_event_id),
             )
 
         elif node_type == "LOCATION_SERIES":
             node = LocationSeriesNode(
                 node_id=str(node_id),
-                summary="",
+                summary=summary or "",
                 series_index=sibling_order,
             )
 
         elif node_type == "LOCATION":
             node = LocationNode(
                 node_id=str(node_id),
-                summary="",
+                summary=summary or "",
                 mention_text="",
                 resolved=bool(resolved),
-            )
-
-        elif node_type == "LOCATION_CANDIDATE":
-            node = LocationCandidateNode(
-                node_id=str(node_id),
-                summary="",
-                gazetteer_location_id=gaz_entity_id,
-                lat=None,
-                lon=None,
-                name=None,
-                place=None,
-                wikidata=None,
-                confidence=None,
-                persists=False,
-                dist_from_front=0.0,
             )
 
         else:
             raise ValueError(f"Unknown node_type: {node_type}")
 
-        # snapshot-scoped state
         node.selected = bool(selected)
         node.deduped = bool(deduped)
-        node.dedupe_target = None  # resolved later if needed
+        node.dedupe_target = dedupe_target_id  # resolve later
 
         nodes[node_id] = node
 
     # --------------------------------------------------------
-    # Link parent/children
+    # Link parent / children
     # --------------------------------------------------------
 
     root: Optional[PostNode] = None
 
-    for (
-        node_id,
-        _,
-        parent_id,
-        *_,
-    ) in rows:
-
+    for node_id, _, parent_id, *_ in rows:
         node = nodes[node_id]
-
         if parent_id is None:
-            root = node  # POST
+            root = node
         else:
-            parent = nodes[parent_id]
-            parent.add_child(node)
+            nodes[parent_id].add_child(node)
 
-    assert root is not None
     assert isinstance(root, PostNode)
+
+    # --------------------------------------------------------
+    # Resolve dedupe targets
+    # --------------------------------------------------------
+
+    for node in nodes.values():
+        if isinstance(node.dedupe_target, int):
+            node.dedupe_target = nodes.get(node.dedupe_target)
 
     # --------------------------------------------------------
     # Attach contexts

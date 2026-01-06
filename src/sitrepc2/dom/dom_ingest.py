@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict
 
 
 # ---------------------------------------------------------------------
@@ -39,13 +39,6 @@ def _ensure_lifecycle_stages(conn: sqlite3.Connection) -> None:
         )
 
     conn.commit()
-
-
-def _fetchone_id(cur: sqlite3.Cursor) -> int:
-    row = cur.fetchone()
-    if row is None:
-        raise RuntimeError("Expected row, got none")
-    return row[0]
 
 
 # ---------------------------------------------------------------------
@@ -166,7 +159,7 @@ def dom_ingest(
     )
 
     # ------------------------------------------------------------
-    # Helper maps
+    # Helper maps (LSS ID → DOM node ID)
     # ------------------------------------------------------------
 
     section_node_ids: Dict[int, int] = {}
@@ -179,7 +172,7 @@ def dom_ingest(
 
     cur.execute(
         """
-        SELECT id, text, ordinal
+        SELECT id, ordinal
         FROM lss_sections
         WHERE lss_run_id = ?
         ORDER BY ordinal
@@ -187,7 +180,7 @@ def dom_ingest(
         (lss_run_id,),
     )
 
-    for section_id, section_text, ordinal in cur.fetchall():
+    for section_id, ordinal in cur.fetchall():
         cur.execute(
             """
             INSERT INTO dom_node (
@@ -220,7 +213,7 @@ def dom_ingest(
 
     cur.execute(
         """
-        SELECT id, section_id, text, ordinal
+        SELECT id, section_id, ordinal
         FROM lss_events
         WHERE lss_run_id = ?
         ORDER BY section_id, ordinal
@@ -228,7 +221,7 @@ def dom_ingest(
         (lss_run_id,),
     )
 
-    for event_id, section_id, event_text, ordinal in cur.fetchall():
+    for event_id, section_id, ordinal in cur.fetchall():
         parent_id = (
             section_node_ids[section_id]
             if section_id is not None
@@ -276,10 +269,14 @@ def dom_ingest(
         (lss_run_id,),
     )
 
-
     series_order: Dict[int, int] = {}
 
     for series_id, lss_event_id in cur.fetchall():
+        if lss_event_id not in event_node_ids:
+            raise RuntimeError(
+                f"LSS event {lss_event_id} not ingested for run {lss_run_id}"
+            )
+
         parent_event_node = event_node_ids[lss_event_id]
 
         idx = series_order.get(lss_event_id, 0)
@@ -314,13 +311,22 @@ def dom_ingest(
 
     cur.execute(
         """
-        SELECT id, series_id, text, ordinal
-        FROM lss_location_items
-        ORDER BY series_id, ordinal
-        """
+        SELECT li.id, li.series_id, li.ordinal
+        FROM lss_location_items li
+        JOIN lss_location_series ls ON ls.id = li.series_id
+        JOIN lss_events e ON e.id = ls.lss_event_id
+        WHERE e.lss_run_id = ?
+        ORDER BY li.series_id, li.ordinal
+        """,
+        (lss_run_id,),
     )
 
-    for item_id, series_id, loc_text, ordinal in cur.fetchall():
+    for item_id, series_id, ordinal in cur.fetchall():
+        if series_id not in series_node_ids:
+            raise RuntimeError(
+                f"LSS location series {series_id} not ingested for run {lss_run_id}"
+            )
+
         parent_series_node = series_node_ids[series_id]
 
         cur.execute(

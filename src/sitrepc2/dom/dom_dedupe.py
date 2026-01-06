@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sqlite3
-from collections import defaultdict
 from typing import Dict, Iterable, List, Tuple
 
 from sitrepc2.lss.lss_scoping import LSSContextHint
@@ -18,42 +17,36 @@ def _normalize(text: str) -> str:
 def _effective_context_signature(
     *,
     dom_node_id: int,
-    dom_conn: sqlite3.Connection,
     context_hints: Iterable[LSSContextHint],
 ) -> Tuple[Tuple[str, int], ...]:
     """
     Context signature used ONLY for dedupe equivalence.
-
-    Includes only:
-      REGION / GROUP / DIRECTION
-    Across the full dominance chain.
+    Snapshot scoping is enforced by caller.
     """
-
     sig = []
-
     for h in context_hints:
-        if h.ctx_kind not in {"REGION", "GROUP", "DIRECTION"}:
-            continue
-        sig.append((h.ctx_kind, h.target_id or -1))
-
+        if h.ctx_kind in {"REGION", "GROUP", "DIRECTION"}:
+            sig.append((h.ctx_kind, h.target_id or -1))
     return tuple(sorted(sig))
 
 
 def _mark_deduped(
     *,
-    dom_conn: sqlite3.Connection,
+    conn: sqlite3.Connection,
+    dom_snapshot_id: int,
     dup_id: int,
     canonical_id: int,
 ) -> None:
-    cur = dom_conn.cursor()
+    cur = conn.cursor()
     cur.execute(
         """
         UPDATE dom_node_state
         SET deduped = TRUE,
             dedupe_target_id = ?
-        WHERE dom_node_id = ?
+        WHERE dom_snapshot_id = ?
+          AND dom_node_id = ?
         """,
-        (canonical_id, dup_id),
+        (canonical_id, dom_snapshot_id, dup_id),
     )
 
 
@@ -63,29 +56,31 @@ def _mark_deduped(
 
 def _dedupe_children(
     *,
-    dom_conn: sqlite3.Connection,
+    conn: sqlite3.Connection,
+    dom_snapshot_id: int,
     parent_id: int,
     node_type: str,
     key_fn,
 ) -> None:
     """
-    Generic sibling dedupe under a single parent.
+    Generic sibling dedupe under a single parent, snapshot-local.
     """
-
-    cur = dom_conn.cursor()
+    cur = conn.cursor()
 
     cur.execute(
         """
         SELECT dn.id, dp.text
         FROM dom_node dn
         LEFT JOIN dom_node_provenance dp ON dp.dom_node_id = dn.id
-        JOIN dom_node_state st ON st.dom_node_id = dn.id
+        JOIN dom_node_state st
+          ON st.dom_node_id = dn.id
+         AND st.dom_snapshot_id = ?
         WHERE dn.parent_id = ?
           AND dn.node_type = ?
           AND st.deduped = FALSE
         ORDER BY dn.sibling_order
         """,
-        (parent_id, node_type),
+        (dom_snapshot_id, parent_id, node_type),
     )
 
     seen: Dict[Tuple, int] = {}
@@ -95,7 +90,8 @@ def _dedupe_children(
 
         if key in seen:
             _mark_deduped(
-                dom_conn=dom_conn,
+                conn=conn,
+                dom_snapshot_id=dom_snapshot_id,
                 dup_id=node_id,
                 canonical_id=seen[key],
             )
@@ -109,95 +105,105 @@ def _dedupe_children(
 
 def dom_dedupe(
     *,
-    dom_conn: sqlite3.Connection,
+    conn: sqlite3.Connection,
+    dom_snapshot_id: int,
     context_hints: List[LSSContextHint],
 ) -> None:
     """
-    Hierarchy-wide DOM deduplication.
+    Snapshot-local DOM deduplication.
 
     Must be run AFTER dom_ingest
     Must be run BEFORE dom_scoping
     """
 
-    cur = dom_conn.cursor()
+    cur = conn.cursor()
 
     # ---------------------------------------------------------
-    # SECTION
+    # POST → SECTION
     # ---------------------------------------------------------
 
     cur.execute(
         """
-        SELECT id
-        FROM dom_node
-        WHERE node_type = 'POST'
-        """
+        SELECT dn.id
+        FROM dom_node dn
+        JOIN dom_snapshot ds ON ds.dom_post_id = dn.dom_post_id
+        WHERE dn.node_type = 'POST'
+          AND ds.id = ?
+        """,
+        (dom_snapshot_id,),
     )
 
     for (post_id,) in cur.fetchall():
         _dedupe_children(
-            dom_conn=dom_conn,
+            conn=conn,
+            dom_snapshot_id=dom_snapshot_id,
             parent_id=post_id,
             node_type="SECTION",
             key_fn=lambda nid, text: (
                 _normalize(text or ""),
                 _effective_context_signature(
                     dom_node_id=nid,
-                    dom_conn=dom_conn,
                     context_hints=context_hints,
                 ),
             ),
         )
 
     # ---------------------------------------------------------
-    # EVENT
+    # SECTION / POST → EVENT
     # ---------------------------------------------------------
 
     cur.execute(
         """
-        SELECT id
-        FROM dom_node
-        WHERE node_type IN ('POST', 'SECTION')
-        """
+        SELECT dn.id
+        FROM dom_node dn
+        JOIN dom_snapshot ds ON ds.dom_post_id = dn.dom_post_id
+        WHERE dn.node_type IN ('POST', 'SECTION')
+          AND ds.id = ?
+        """,
+        (dom_snapshot_id,),
     )
 
     for (parent_id,) in cur.fetchall():
         _dedupe_children(
-            dom_conn=dom_conn,
+            conn=conn,
+            dom_snapshot_id=dom_snapshot_id,
             parent_id=parent_id,
             node_type="EVENT",
             key_fn=lambda nid, text: (
                 _normalize(text or ""),
                 _effective_context_signature(
                     dom_node_id=nid,
-                    dom_conn=dom_conn,
                     context_hints=context_hints,
                 ),
             ),
         )
 
     # ---------------------------------------------------------
-    # LOCATION_SERIES
+    # EVENT → LOCATION_SERIES
     # ---------------------------------------------------------
 
     cur.execute(
         """
-        SELECT id
-        FROM dom_node
-        WHERE node_type = 'EVENT'
-        """
+        SELECT dn.id
+        FROM dom_node dn
+        JOIN dom_snapshot ds ON ds.dom_post_id = dn.dom_post_id
+        WHERE dn.node_type = 'EVENT'
+          AND ds.id = ?
+        """,
+        (dom_snapshot_id,),
     )
 
     for (event_id,) in cur.fetchall():
+
         def series_key(nid, _):
-            c = dom_conn.cursor()
+            c = conn.cursor()
             c.execute(
                 """
                 SELECT dp.text
-                FROM dom_node dn
-                JOIN dom_node dpn ON dpn.parent_id = dn.id
-                JOIN dom_node_provenance dp ON dp.dom_node_id = dpn.id
-                WHERE dn.id = ?
-                ORDER BY dpn.sibling_order
+                FROM dom_node child
+                JOIN dom_node_provenance dp ON dp.dom_node_id = child.id
+                WHERE child.parent_id = ?
+                ORDER BY child.sibling_order
                 """,
                 (nid,),
             )
@@ -206,43 +212,46 @@ def dom_dedupe(
                 tuple(items),
                 _effective_context_signature(
                     dom_node_id=nid,
-                    dom_conn=dom_conn,
                     context_hints=context_hints,
                 ),
             )
 
         _dedupe_children(
-            dom_conn=dom_conn,
+            conn=conn,
+            dom_snapshot_id=dom_snapshot_id,
             parent_id=event_id,
             node_type="LOCATION_SERIES",
             key_fn=series_key,
         )
 
     # ---------------------------------------------------------
-    # LOCATION
+    # LOCATION_SERIES → LOCATION
     # ---------------------------------------------------------
 
     cur.execute(
         """
-        SELECT id
-        FROM dom_node
-        WHERE node_type = 'LOCATION_SERIES'
-        """
+        SELECT dn.id
+        FROM dom_node dn
+        JOIN dom_snapshot ds ON ds.dom_post_id = dn.dom_post_id
+        WHERE dn.node_type = 'LOCATION_SERIES'
+          AND ds.id = ?
+        """,
+        (dom_snapshot_id,),
     )
 
     for (series_id,) in cur.fetchall():
         _dedupe_children(
-            dom_conn=dom_conn,
+            conn=conn,
+            dom_snapshot_id=dom_snapshot_id,
             parent_id=series_id,
             node_type="LOCATION",
             key_fn=lambda nid, text: (
                 _normalize(text or ""),
                 _effective_context_signature(
                     dom_node_id=nid,
-                    dom_conn=dom_conn,
                     context_hints=context_hints,
                 ),
             ),
         )
 
-    dom_conn.commit()
+    conn.commit()
