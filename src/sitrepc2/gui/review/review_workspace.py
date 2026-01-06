@@ -86,6 +86,9 @@ class DomReviewWorkspace(QWidget):
         self.table_view.setModel(self.model)
         self.table_view.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table_view.setSelectionMode(QAbstractItemView.SingleSelection)
+
+        # self.table_view.setSelectionBehavior(QAbstractItemView.SelectRows)
+        # self.table_view.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table_view.verticalHeader().setVisible(False)
 
@@ -143,7 +146,8 @@ class DomReviewWorkspace(QWidget):
         # ------------------------------------------------------------
 
         if self.model.rowCount() > 0:
-            self.table_view.setCurrentIndex(self.model.index(0, 0))
+            # self.table_view.setCurrentIndex(self.model.index(0, 0))
+            self.table_view.setCurrentIndex(self.model.index(0, 1))
 
     # ------------------------------------------------------------------
     # Run selection (focus only)
