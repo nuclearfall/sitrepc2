@@ -55,13 +55,15 @@ def persist_dom_tree(
             """
             UPDATE dom_node_state
             SET selected = ?,
-                resolved = ?
+                resolved = ?,
+        +       summary = ?
             WHERE dom_snapshot_id = ?
               AND dom_node_id = ?
             """,
             (
                 bool(node.selected),
                 bool(getattr(node, "resolved", None)),
+        +       node.summary,
                 dom_snapshot_id,
                 dom_node_id,
             ),

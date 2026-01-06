@@ -2,35 +2,29 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import datetime
-from typing import Iterable
 
 from sitrepc2.dom.dom_ingest import dom_ingest
 from sitrepc2.dom.dom_dedupe import dom_dedupe
 from sitrepc2.dom.dom_scoping import scope_dom_locations
 from sitrepc2.dom.dom_tree_builder import build_dom_tree
+from sitrepc2.dom.dom_context_loader import load_lss_context_hints
 
-from sitrepc2.lss.lss_scoping import LSSContextHint
-
-
-# ============================================================
-# Public API
-# ============================================================
 
 def build_dom_for_first_review(
     *,
     conn: sqlite3.Connection,
     ingest_post_id: int,
     lss_run_id: int,
-    context_hints: Iterable[LSSContextHint],
-) :
+):
     """
     Build (or load) a DOM snapshot and return a hydrated DOM tree
     suitable for FIRST REVIEW (GUI / CLI).
 
-    This function is:
-      • idempotent
-      • side-effect bounded
+    Properties:
+      • Idempotent
+      • LSS-frozen compliant
       • UI-safe
+      • Non-leaky
     """
 
     cur = conn.cursor()
@@ -56,14 +50,15 @@ def build_dom_for_first_review(
     if row is not None:
         dom_snapshot_id = row[0]
 
-        # Snapshot already exists → just hydrate
-        return build_dom_tree(
+        tree = build_dom_tree(
             conn=conn,
             dom_snapshot_id=dom_snapshot_id,
         )
 
+        return tree, dom_snapshot_id
+
     # --------------------------------------------------------
-    # No snapshot exists → create one
+    # No snapshot → ingest
     # --------------------------------------------------------
 
     dom_snapshot_id = dom_ingest(
@@ -74,31 +69,43 @@ def build_dom_for_first_review(
     )
 
     # --------------------------------------------------------
-    # Structural dedupe (snapshot-scoped)
+    # Load authoritative context hints (INTERNAL)
     # --------------------------------------------------------
 
-    dom_dedupe(
-        dom_conn=conn,
-        context_hints=list(context_hints),
+    context_hints = load_lss_context_hints(
+        conn=conn,
+        lss_run_id=lss_run_id,
     )
 
     # --------------------------------------------------------
-    # Gazetteer scoping (skip deduped nodes)
+    # Structural dedupe (snapshot-scoped)
     # --------------------------------------------------------
 
+    # Deduplication
+    dom_dedupe(
+        dom_conn=conn,
+        context_hints=context_hints,
+    )
+
+    # Gazetteer scoping
     scope_dom_locations(
         dom_conn=conn,
         dom_snapshot_id=dom_snapshot_id,
         context_hints=context_hints,
     )
 
-    # --------------------------------------------------------
-    # Hydrate DOM tree for UI
-    # --------------------------------------------------------
+    # NEW: materialize context metadata
+    materialize_dom_context(
+        dom_conn=conn,
+        dom_snapshot_id=dom_snapshot_id,
+        context_hints=context_hints,
+    )
 
+    # Hydrate DOM tree
     tree = build_dom_tree(
         conn=conn,
         dom_snapshot_id=dom_snapshot_id,
     )
+
 
     return tree, dom_snapshot_id

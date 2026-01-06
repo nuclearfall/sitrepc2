@@ -247,3 +247,9 @@ CREATE TABLE dom_commit_eligibility (
         REFERENCES dom_node(id)
         ON DELETE CASCADE
 );
+
+CREATE INDEX idx_dom_context_snapshot
+    ON dom_context(dom_snapshot_id);
+
+CREATE INDEX idx_dom_context_node
+    ON dom_context(dom_node_id);
