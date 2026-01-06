@@ -364,3 +364,10 @@ class IngestWorkspace(QWidget):
         rows = self.ingest.query_posts(IngestPostFilter())
         detail = self.ingest.get_post(rows[items[0].row()].post_id)
         self.post_detail.setPlainText(detail.text)
+
+    def _on_source_selection_changed(self) -> None:
+        items = self._selected_sources()
+        if len(items) == 1:
+            self._load_source_into_editor(items[0])
+        else:
+            self._loaded_source_name = None
