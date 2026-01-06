@@ -24,7 +24,7 @@ from sitrepc2.gui.review.dom_tree_model import DomTreeModel
 from sitrepc2.dom.dom_first_review import build_dom_for_first_review
 from sitrepc2.dom.dom_tree_builder import build_dom_tree
 from sitrepc2.dom.dom_persist_tree import persist_dom_tree
-from sitrepc2.dom.dom_lifecycle import advance_dom_snapshot
+from sitrepc2.dom.dom_snapshot import advance_dom_snapshot
 from sitrepc2.dom.dom_commit_eligibility import recompute_commit_eligibility
 
 
