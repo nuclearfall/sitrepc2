@@ -19,7 +19,7 @@ from sitrepc2.config.paths import records_path
 
 from sitrepc2.gui.review.lss_run_list_model import LssRunListModel
 from sitrepc2.gui.review.dom_tree_model import DomTreeModel
-from sitrepc2.gui.review.location_detail_panel import LocationDetailPanel
+from sitrepc2.gui.review.dom_detail import LocationDetailPanel
 
 from sitrepc2.dom.dom_first_review import build_dom_for_first_review
 from sitrepc2.dom.dom_tree_builder import build_dom_tree
