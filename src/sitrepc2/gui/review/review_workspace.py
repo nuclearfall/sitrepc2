@@ -17,6 +17,7 @@ from PySide6.QtCore import Qt, QModelIndex
 
 from sitrepc2.config.paths import records_path
 
+from sitrepc2.dom.nodes import DomNode
 from sitrepc2.gui.review.lss_run_list_model import LssRunListModel
 from sitrepc2.gui.review.dom_tree_model import DomTreeModel
 from sitrepc2.gui.review.dom_node_detail_panel import DomNodeDetailPanel
