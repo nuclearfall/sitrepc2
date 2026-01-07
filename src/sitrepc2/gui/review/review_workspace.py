@@ -8,7 +8,6 @@ from PySide6.QtWidgets import (
     QTableView,
     QPlainTextEdit,
     QTreeView,
-    QLabel,
     QVBoxLayout,
     QHeaderView,
     QAbstractItemView,
@@ -20,6 +19,7 @@ from sitrepc2.config.paths import records_path
 
 from sitrepc2.gui.review.lss_run_list_model import LssRunListModel
 from sitrepc2.gui.review.dom_tree_model import DomTreeModel
+from sitrepc2.gui.review.location_detail_panel import LocationDetailPanel
 
 from sitrepc2.dom.dom_first_review import build_dom_for_first_review
 from sitrepc2.dom.dom_tree_builder import build_dom_tree
@@ -60,7 +60,6 @@ class DomReviewWorkspace(QWidget):
 
         left_splitter = QSplitter(Qt.Vertical)
 
-        # ---- Actions ----
         self.prepare_button = QPushButton("Prepare for Review")
         self.prepare_button.clicked.connect(self.prepare_for_review)
 
@@ -76,7 +75,6 @@ class DomReviewWorkspace(QWidget):
 
         left_splitter.addWidget(action_panel)
 
-        # ---- Run list ----
         self.table_view = QTableView()
         self.table_view.setModel(self.model)
         self.table_view.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -86,7 +84,6 @@ class DomReviewWorkspace(QWidget):
 
         left_splitter.addWidget(self.table_view)
 
-        # ---- Text ----
         self.text_edit = QPlainTextEdit()
         self.text_edit.setReadOnly(True)
         left_splitter.addWidget(self.text_edit)
@@ -106,13 +103,8 @@ class DomReviewWorkspace(QWidget):
         self.dom_tree_view.setExpandsOnDoubleClick(False)
         right_splitter.addWidget(self.dom_tree_view)
 
-        self.node_detail_placeholder = QWidget()
-        node_layout = QVBoxLayout(self.node_detail_placeholder)
-        label = QLabel("Select a DOM node to view details")
-        label.setAlignment(Qt.AlignCenter)
-        node_layout.addWidget(label)
-
-        right_splitter.addWidget(self.node_detail_placeholder)
+        self.node_detail_panel = LocationDetailPanel(parent=self)
+        right_splitter.addWidget(self.node_detail_panel)
 
         # ---- Assemble ----
         main_splitter.addWidget(left_splitter)
@@ -150,7 +142,9 @@ class DomReviewWorkspace(QWidget):
         run_id = run["id"]
         ingest_post_id = run["ingest_post_id"]
 
+        # Reset state
         self.dom_tree_view.setModel(None)
+        self.node_detail_panel.clear()
         self.current_dom_tree = None
         self.dom_snapshot_id = None
         self.commit_button.setEnabled(False)
@@ -159,7 +153,6 @@ class DomReviewWorkspace(QWidget):
         try:
             cur = conn.cursor()
 
-            # Load post text
             cur.execute(
                 """
                 SELECT ip.text
@@ -178,7 +171,6 @@ class DomReviewWorkspace(QWidget):
             snapshot_id = self._get_created_snapshot_id(
                 conn, ingest_post_id, run_id
             )
-
             if snapshot_id is None:
                 return
 
@@ -193,11 +185,37 @@ class DomReviewWorkspace(QWidget):
             self.dom_tree_view.setModel(self.dom_model)
             self.dom_tree_view.expandAll()
 
+            # 🔑 CONNECT TREE SELECTION *AFTER* MODEL IS SET
+            self.dom_tree_view.selectionModel().currentChanged.connect(
+                self.on_dom_node_selected
+            )
+
         finally:
             conn.close()
 
     # ------------------------------------------------------------------
-    # Prepare for Review (batch from selection)
+    # Tree node selection → detail panel
+    # ------------------------------------------------------------------
+
+    def on_dom_node_selected(self, current: QModelIndex, previous: QModelIndex):
+        if not current.isValid():
+            self.node_detail_panel.clear()
+            return
+
+        node = current.internalPointer()
+        if node is None:
+            self.node_detail_panel.clear()
+            return
+
+        self.node_detail_panel.set_node(
+            node=node,
+            root=self.current_dom_tree,
+            snapshot_id=self.dom_snapshot_id,
+            db_path=str(records_path()),
+        )
+
+    # ------------------------------------------------------------------
+    # Prepare for Review
     # ------------------------------------------------------------------
 
     def prepare_for_review(self):
@@ -270,6 +288,8 @@ class DomReviewWorkspace(QWidget):
             self.dom_model = DomTreeModel(self.current_dom_tree)
             self.dom_tree_view.setModel(self.dom_model)
             self.dom_tree_view.expandAll()
+
+            self.node_detail_panel.clear()
 
         finally:
             conn.close()
