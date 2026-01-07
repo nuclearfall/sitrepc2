@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime
 from typing import Dict
+import json
 
 
 # ---------------------------------------------------------------------
@@ -23,12 +24,7 @@ LIFECYCLE_STAGES = {
 # ---------------------------------------------------------------------
 
 def _ensure_lifecycle_stages(conn: sqlite3.Connection) -> None:
-    """
-    Ensure dom_lifecycle_stage contains the canonical stages.
-    Idempotent.
-    """
     cur = conn.cursor()
-
     for stage_id, name in LIFECYCLE_STAGES.items():
         cur.execute(
             """
@@ -37,7 +33,6 @@ def _ensure_lifecycle_stages(conn: sqlite3.Connection) -> None:
             """,
             (stage_id, name),
         )
-
     conn.commit()
 
 
@@ -67,34 +62,24 @@ def dom_ingest(
     # ------------------------------------------------------------
 
     cur.execute(
-        """
-        SELECT ingest_post_id
-        FROM lss_runs
-        WHERE id = ?
-        """,
+        "SELECT ingest_post_id FROM lss_runs WHERE id = ?",
         (lss_run_id,),
     )
     row = cur.fetchone()
     if row is None:
         raise ValueError(f"lss_run_id {lss_run_id} does not exist")
-
     if row[0] != ingest_post_id:
-        raise ValueError(
-            f"lss_run_id {lss_run_id} does not belong to ingest_post_id {ingest_post_id}"
-        )
+        raise ValueError("lss_run_id does not belong to ingest_post_id")
 
     cur.execute(
         """
-        SELECT id
-        FROM dom_post
+        SELECT id FROM dom_post
         WHERE ingest_post_id = ? AND lss_run_id = ?
         """,
         (ingest_post_id, lss_run_id),
     )
     if cur.fetchone() is not None:
-        raise RuntimeError(
-            "DOM already ingested for this (ingest_post_id, lss_run_id)"
-        )
+        raise RuntimeError("DOM already ingested for this run")
 
     # ------------------------------------------------------------
     # Lifecycle stages
@@ -107,10 +92,7 @@ def dom_ingest(
     # ------------------------------------------------------------
 
     cur.execute(
-        """
-        INSERT INTO dom_post (ingest_post_id, lss_run_id)
-        VALUES (?, ?)
-        """,
+        "INSERT INTO dom_post (ingest_post_id, lss_run_id) VALUES (?, ?)",
         (ingest_post_id, lss_run_id),
     )
     dom_post_id = cur.lastrowid
@@ -121,11 +103,7 @@ def dom_ingest(
 
     cur.execute(
         """
-        INSERT INTO dom_snapshot (
-            dom_post_id,
-            lifecycle_stage_id,
-            created_at
-        )
+        INSERT INTO dom_snapshot (dom_post_id, lifecycle_stage_id, created_at)
         VALUES (?, 1, ?)
         """,
         (dom_post_id, created_at.isoformat()),
@@ -138,12 +116,7 @@ def dom_ingest(
 
     cur.execute(
         """
-        INSERT INTO dom_node (
-            dom_post_id,
-            node_type,
-            parent_id,
-            sibling_order
-        )
+        INSERT INTO dom_node (dom_post_id, node_type, parent_id, sibling_order)
         VALUES (?, 'POST', NULL, 0)
         """,
         (dom_post_id,),
@@ -151,15 +124,12 @@ def dom_ingest(
     post_node_id = cur.lastrowid
 
     cur.execute(
-        """
-        INSERT INTO dom_node_provenance (dom_node_id)
-        VALUES (?)
-        """,
+        "INSERT INTO dom_node_provenance (dom_node_id) VALUES (?)",
         (post_node_id,),
     )
 
     # ------------------------------------------------------------
-    # Helper maps (LSS ID → DOM node ID)
+    # Helper maps
     # ------------------------------------------------------------
 
     section_node_ids: Dict[int, int] = {}
@@ -167,13 +137,12 @@ def dom_ingest(
     series_node_ids: Dict[int, int] = {}
 
     # ------------------------------------------------------------
-    # Sections → DOM SECTION nodes
+    # Sections
     # ------------------------------------------------------------
 
     cur.execute(
         """
-        SELECT id, ordinal
-        FROM lss_sections
+        SELECT id, ordinal FROM lss_sections
         WHERE lss_run_id = ?
         ORDER BY ordinal
         """,
@@ -183,12 +152,7 @@ def dom_ingest(
     for section_id, ordinal in cur.fetchall():
         cur.execute(
             """
-            INSERT INTO dom_node (
-                dom_post_id,
-                node_type,
-                parent_id,
-                sibling_order
-            )
+            INSERT INTO dom_node (dom_post_id, node_type, parent_id, sibling_order)
             VALUES (?, 'SECTION', ?, ?)
             """,
             (dom_post_id, post_node_id, ordinal),
@@ -198,23 +162,19 @@ def dom_ingest(
 
         cur.execute(
             """
-            INSERT INTO dom_node_provenance (
-                dom_node_id,
-                lss_section_ids
-            )
+            INSERT INTO dom_node_provenance (dom_node_id, lss_section_ids)
             VALUES (?, json_array(?))
             """,
             (dom_section_id, section_id),
         )
 
     # ------------------------------------------------------------
-    # Events → DOM EVENT nodes
+    # Events
     # ------------------------------------------------------------
 
     cur.execute(
         """
-        SELECT id, section_id, ordinal
-        FROM lss_events
+        SELECT id, section_id, ordinal FROM lss_events
         WHERE lss_run_id = ?
         ORDER BY section_id, ordinal
         """,
@@ -230,12 +190,7 @@ def dom_ingest(
 
         cur.execute(
             """
-            INSERT INTO dom_node (
-                dom_post_id,
-                node_type,
-                parent_id,
-                sibling_order
-            )
+            INSERT INTO dom_node (dom_post_id, node_type, parent_id, sibling_order)
             VALUES (?, 'EVENT', ?, ?)
             """,
             (dom_post_id, parent_id, ordinal),
@@ -245,17 +200,14 @@ def dom_ingest(
 
         cur.execute(
             """
-            INSERT INTO dom_node_provenance (
-                dom_node_id,
-                lss_event_id
-            )
+            INSERT INTO dom_node_provenance (dom_node_id, lss_event_id)
             VALUES (?, ?)
             """,
             (dom_event_id, event_id),
         )
 
     # ------------------------------------------------------------
-    # Location series → DOM LOCATION_SERIES nodes
+    # Location series
     # ------------------------------------------------------------
 
     cur.execute(
@@ -272,46 +224,31 @@ def dom_ingest(
     series_order: Dict[int, int] = {}
 
     for series_id, lss_event_id in cur.fetchall():
-        if lss_event_id not in event_node_ids:
-            raise RuntimeError(
-                f"LSS event {lss_event_id} not ingested for run {lss_run_id}"
-            )
-
         parent_event_node = event_node_ids[lss_event_id]
-
         idx = series_order.get(lss_event_id, 0)
         series_order[lss_event_id] = idx + 1
 
         cur.execute(
             """
-            INSERT INTO dom_node (
-                dom_post_id,
-                node_type,
-                parent_id,
-                sibling_order
-            )
+            INSERT INTO dom_node (dom_post_id, node_type, parent_id, sibling_order)
             VALUES (?, 'LOCATION_SERIES', ?, ?)
             """,
             (dom_post_id, parent_event_node, idx),
         )
-        dom_series_id = cur.lastrowid
-        series_node_ids[series_id] = dom_series_id
+        series_node_ids[series_id] = cur.lastrowid
 
         cur.execute(
-            """
-            INSERT INTO dom_node_provenance (dom_node_id)
-            VALUES (?)
-            """,
-            (dom_series_id,),
+            "INSERT INTO dom_node_provenance (dom_node_id) VALUES (?)",
+            (series_node_ids[series_id],),
         )
 
     # ------------------------------------------------------------
-    # Location items → DOM LOCATION nodes
+    # Location items
     # ------------------------------------------------------------
 
     cur.execute(
         """
-        SELECT li.id, li.series_id, li.ordinal
+        SELECT li.id, li.series_id, li.ordinal, li.text
         FROM lss_location_items li
         JOIN lss_location_series ls ON ls.id = li.series_id
         JOIN lss_events e ON e.id = ls.lss_event_id
@@ -321,50 +258,97 @@ def dom_ingest(
         (lss_run_id,),
     )
 
-    for item_id, series_id, ordinal in cur.fetchall():
-        if series_id not in series_node_ids:
-            raise RuntimeError(
-                f"LSS location series {series_id} not ingested for run {lss_run_id}"
-            )
+    location_item_text: Dict[int, str] = {}
 
+    for item_id, series_id, ordinal, text in cur.fetchall():
         parent_series_node = series_node_ids[series_id]
 
         cur.execute(
             """
-            INSERT INTO dom_node (
-                dom_post_id,
-                node_type,
-                parent_id,
-                sibling_order
-            )
+            INSERT INTO dom_node (dom_post_id, node_type, parent_id, sibling_order)
             VALUES (?, 'LOCATION', ?, ?)
             """,
             (dom_post_id, parent_series_node, ordinal),
         )
         dom_location_id = cur.lastrowid
+        location_item_text[dom_location_id] = text
 
         cur.execute(
-            """
-            INSERT INTO dom_node_provenance (dom_node_id)
-            VALUES (?)
-            """,
+            "INSERT INTO dom_node_provenance (dom_node_id) VALUES (?)",
             (dom_location_id,),
         )
 
     # ------------------------------------------------------------
-    # Initialize dom_node_state for all nodes
+    # Load LSS text for summaries
     # ------------------------------------------------------------
 
     cur.execute(
-        """
-        SELECT id
-        FROM dom_node
-        WHERE dom_post_id = ?
-        """,
+        "SELECT id, text FROM lss_sections WHERE lss_run_id = ?",
+        (lss_run_id,),
+    )
+    section_text = dict(cur.fetchall())
+
+    cur.execute(
+        "SELECT id, text FROM lss_events WHERE lss_run_id = ?",
+        (lss_run_id,),
+    )
+    event_text = dict(cur.fetchall())
+
+    # ------------------------------------------------------------
+    # Initialize dom_node_state WITH summaries
+    # ------------------------------------------------------------
+
+    cur.execute(
+        "SELECT id, node_type FROM dom_node WHERE dom_post_id = ?",
         (dom_post_id,),
     )
 
-    for (dom_node_id,) in cur.fetchall():
+    for dom_node_id, node_type in cur.fetchall():
+        summary = ""
+
+        if node_type == "EVENT":
+            cur.execute(
+                """
+                SELECT lss_event_id
+                FROM dom_node_provenance
+                WHERE dom_node_id = ?
+                """,
+                (dom_node_id,),
+            )
+            row = cur.fetchone()
+            if row and row[0] in event_text:
+                summary = event_text[row[0]]
+
+        elif node_type == "SECTION":
+            cur.execute(
+                """
+                SELECT lss_section_ids
+                FROM dom_node_provenance
+                WHERE dom_node_id = ?
+                """,
+                (dom_node_id,),
+            )
+            row = cur.fetchone()
+            if row and row[0]:
+                section_ids = json.loads(row[0])
+                if section_ids and section_ids[0] in section_text:
+                    summary = section_text[section_ids[0]]
+
+        elif node_type == "LOCATION":
+            summary = location_item_text.get(dom_node_id, "")
+
+        elif node_type == "LOCATION_SERIES":
+            cur.execute(
+                "SELECT id FROM dom_node WHERE parent_id = ? ORDER BY sibling_order",
+                (dom_node_id,),
+            )
+            texts = [
+                location_item_text.get(cid, "")
+                for (cid,) in cur.fetchall()
+                if cid in location_item_text
+            ]
+            summary = ", ".join(texts)
+
         cur.execute(
             """
             INSERT INTO dom_node_state (
@@ -375,9 +359,9 @@ def dom_ingest(
                 resolved,
                 resolution_source
             )
-            VALUES (?, ?, TRUE, '', NULL, NULL)
+            VALUES (?, ?, TRUE, ?, NULL, NULL)
             """,
-            (dom_snapshot_id, dom_node_id),
+            (dom_snapshot_id, dom_node_id, summary),
         )
 
     conn.commit()
