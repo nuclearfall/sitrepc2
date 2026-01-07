@@ -19,7 +19,7 @@ from sitrepc2.config.paths import records_path
 
 from sitrepc2.gui.review.lss_run_list_model import LssRunListModel
 from sitrepc2.gui.review.dom_tree_model import DomTreeModel
-from sitrepc2.gui.review.dom_detail_panel import LocationDetailPanel
+from sitrepc2.gui.review.dom_node_detail_panel import DomNodeDetailPanel
 
 from sitrepc2.dom.dom_first_review import build_dom_for_first_review
 from sitrepc2.dom.dom_tree_builder import build_dom_tree
@@ -103,7 +103,8 @@ class DomReviewWorkspace(QWidget):
         self.dom_tree_view.setExpandsOnDoubleClick(False)
         right_splitter.addWidget(self.dom_tree_view)
 
-        self.node_detail_panel = LocationDetailPanel(parent=self)
+        self.node_detail_panel = DomNodeDetailPanel(parent=self)
+
         right_splitter.addWidget(self.node_detail_panel)
 
         # ---- Assemble ----
@@ -203,16 +204,12 @@ class DomReviewWorkspace(QWidget):
             return
 
         node = current.internalPointer()
-        if node is None:
+        if not isinstance(node, DomNode):
             self.node_detail_panel.clear()
             return
 
-        self.node_detail_panel.set_node(
-            node=node,
-            root=self.current_dom_tree,
-            snapshot_id=self.dom_snapshot_id,
-            db_path=str(records_path()),
-        )
+        self.node_detail_panel.set_node(node)
+
 
     # ------------------------------------------------------------------
     # Prepare for Review

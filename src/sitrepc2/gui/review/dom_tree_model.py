@@ -5,11 +5,14 @@ from sitrepc2.dom.nodes import DomNode, Context
 class _ContextRow:
     """
     Lightweight adapter so Context can appear as a tree row.
+    Display-only; never treated as a DomNode.
     """
     def __init__(self, parent: DomNode, context: Context):
-        self.parent = parent
+        self.parent = parent          # DomNode
         self.context = context
-        self.children = []  # leaf
+        self.children = []            # leaf
+
+    # ---- display helpers ----
 
     @property
     def selected(self) -> bool:
@@ -41,6 +44,7 @@ class DomTreeModel(QAbstractItemModel):
         children = self._children_of(parent_node)
 
         if 0 <= row < len(children):
+            # 🔑 internalPointer is ALWAYS the actual row object
             return self.createIndex(row, column, children[row])
 
         return QModelIndex()
@@ -50,7 +54,13 @@ class DomTreeModel(QAbstractItemModel):
             return QModelIndex()
 
         node = index.internalPointer()
-        parent = getattr(node, "parent", None)
+
+        # Context rows: parent is always the owning DomNode
+        if isinstance(node, _ContextRow):
+            parent = node.parent
+        else:
+            parent = getattr(node, "parent", None)
+
         if parent is None or parent == self.root:
             return QModelIndex()
 
@@ -58,7 +68,11 @@ class DomTreeModel(QAbstractItemModel):
         if grandparent is None:
             return QModelIndex()
 
-        row = self._children_of(grandparent).index(parent)
+        try:
+            row = self._children_of(grandparent).index(parent)
+        except ValueError:
+            return QModelIndex()
+
         return self.createIndex(row, 0, parent)
 
     # ------------------------------------------------------------------
@@ -66,12 +80,16 @@ class DomTreeModel(QAbstractItemModel):
     # ------------------------------------------------------------------
 
     def _children_of(self, node):
+        # Context rows are leaves
         if isinstance(node, _ContextRow):
             return []
+
         rows = []
         rows.extend(node.children)
+
         for ctx in getattr(node, "contexts", []):
             rows.append(_ContextRow(node, ctx))
+
         return rows
 
     # ------------------------------------------------------------------
@@ -127,6 +145,11 @@ class DomTreeModel(QAbstractItemModel):
         return True
 
     def _set_selected_recursive(self, node, selected: bool):
+        # Context rows: update only themselves
+        if isinstance(node, _ContextRow):
+            node.selected = selected
+            return
+
         node.selected = selected
         for child in self._children_of(node):
             self._set_selected_recursive(child, selected)
@@ -138,4 +161,8 @@ class DomTreeModel(QAbstractItemModel):
     def flags(self, index):
         if not index.isValid():
             return Qt.NoItemFlags
-        return Qt.ItemIsEnabled | Qt.ItemIsUserCheckable | Qt.ItemIsSelectable
+        return (
+            Qt.ItemIsEnabled
+            | Qt.ItemIsUserCheckable
+            | Qt.ItemIsSelectable
+        )
