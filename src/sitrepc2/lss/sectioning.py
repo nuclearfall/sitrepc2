@@ -84,7 +84,7 @@ def split_into_sections(post_text: str) -> List[LSSSection]:
     flush(cursor)
 
     # -------------------------------------------------
-    # Pass 2: paragraph fallback for very long sections
+    # Pass 2: paragraph-based splitting (double newline)
     # -------------------------------------------------
 
     final_spans: list[tuple[int, int]] = []
@@ -92,21 +92,25 @@ def split_into_sections(post_text: str) -> List[LSSSection]:
     for start, end in sections:
         block_text = post_text[start:end]
 
-        if len(block_text) > 800 and "\n\n" in block_text:
+        if "\n\n" in block_text:
             rel_cursor = 0
             for para in block_text.split("\n\n"):
                 para = para.strip()
                 if not para:
                     continue
+
                 para_start = block_text.find(para, rel_cursor)
                 if para_start == -1:
                     continue
+
                 abs_start = start + para_start
                 abs_end = abs_start + len(para)
+
                 final_spans.append((abs_start, abs_end))
                 rel_cursor = para_start + len(para)
         else:
             final_spans.append((start, end))
+
 
     # -------------------------------------------------
     # Emit ordered sections
