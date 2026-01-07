@@ -15,7 +15,10 @@ from sitrepc2.dom.nodes import DomNode
 class DomNodeDetailPanel(QWidget):
     """
     Generic, read-only detail panel for any DomNode.
-    Intended for review/debug visibility.
+
+    Intentionally defensive:
+    - does not assume node_type / node_id
+    - reflects actual attributes present on the node
     """
 
     def __init__(self, parent=None):
@@ -32,19 +35,19 @@ class DomNodeDetailPanel(QWidget):
         form = QFormLayout()
         layout.addLayout(form)
 
-        self.node_type_label = QLabel("-")
-        form.addRow("Node type:", self.node_type_label)
+        # Node "type" = class name
+        self.node_class_label = QLabel("-")
+        form.addRow("Node class:", self.node_class_label)
 
-        self.node_id_label = QLabel("-")
-        form.addRow("Node id:", self.node_id_label)
-
+        # Selected state
         self.selected_checkbox = QCheckBox()
         self.selected_checkbox.setEnabled(False)
         form.addRow("Selected:", self.selected_checkbox)
 
-        self.summary_text = QTextEdit()
-        self.summary_text.setReadOnly(True)
-        layout.addWidget(self.summary_text)
+        # Summary / text
+        self.content_text = QTextEdit()
+        self.content_text.setReadOnly(True)
+        layout.addWidget(self.content_text)
 
         self.clear()
 
@@ -53,16 +56,24 @@ class DomNodeDetailPanel(QWidget):
     def set_node(self, node: DomNode):
         self.current_node = node
 
-        self.node_type_label.setText(node.node_type)
-        self.node_id_label.setText(str(node.node_id))
-        self.selected_checkbox.setChecked(bool(node.selected))
+        # Class name as type
+        self.node_class_label.setText(node.__class__.__name__)
 
-        summary = getattr(node, "summary", None)
-        self.summary_text.setPlainText(summary or "")
+        # Selected flag (if present)
+        self.selected_checkbox.setChecked(bool(getattr(node, "selected", False)))
+
+        # Prefer summary, fall back to text, else repr
+        if hasattr(node, "summary") and node.summary:
+            content = node.summary
+        elif hasattr(node, "text") and node.text:
+            content = node.text
+        else:
+            content = repr(node)
+
+        self.content_text.setPlainText(content)
 
     def clear(self):
         self.current_node = None
-        self.node_type_label.setText("-")
-        self.node_id_label.setText("-")
+        self.node_class_label.setText("-")
         self.selected_checkbox.setChecked(False)
-        self.summary_text.clear()
+        self.content_text.clear()
